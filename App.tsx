@@ -1,20 +1,23 @@
-import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createStackNavigator } from '@react-navigation/stack';
+import { AuthProvider } from './src/contexts/authContext';
+import { TaskProvider } from './src/contexts/TasksContext';
+import MainNavigator from './src/navigation/MainNavigator';
+
+const Stack = createStackNavigator();
 
 export default function App() {
   return (
-    <View style={styles.container}>
-      <Text>Open up App.tsx to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
+    <AuthProvider>
+      <TaskProvider>
+        <NavigationContainer>
+          <MainNavigator />
+        </NavigationContainer>
+      </TaskProvider>
+    </AuthProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+//LOS CAMBIOS FUERON Web: BrowserRouter, Mobile: NavigationContainer
+// React Native no usa navegador, necesita contenedor propio
+//NavigationContainer crea contexto de navegación que mantiene estado de rutas
