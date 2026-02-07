@@ -1,110 +1,149 @@
-// src/contexts/ClinicContext.tsx
 import React, { createContext, useState, useContext, useCallback } from 'react';
 import * as clinicApi from '../api/clinic';
 
 interface ClinicContextType {
   // Estado
-  clients: any[];
+  owners: any[];
+  pets: any[];
   appointments: any[];
-  selectedClient: any | null;
+  selectedOwner: any | null;
+  selectedPet: any | null;
   loading: boolean;
   error: string | null;
   
-  // Clientes
-  fetchClients: (params?: any) => Promise<void>;
-  fetchClient: (id: string) => Promise<any>;
-  createClient: (client: any) => Promise<{ ok: boolean }>;
-  updateClient: (id: string, client: any) => Promise<{ ok: boolean }>;
-  deleteClient: (id: string) => Promise<{ ok: boolean }>;
+  // Dueños
+  fetchOwners: (params?: any) => Promise<void>;
+  fetchOwner: (id: string) => Promise<any>;
+  createOwner: (owner: any) => Promise<{ success: boolean; data?: any }>;
+  updateOwner: (id: string, owner: any) => Promise<{ success: boolean; data?: any }>;
+  
+  // Mascotas
+  fetchPets: (params?: any) => Promise<void>;
+  fetchPet: (id: string) => Promise<any>;
+  createPet: (pet: any) => Promise<{ success: boolean; data?: any }>;
+  updatePet: (id: string, pet: any) => Promise<{ success: boolean; data?: any }>;
   
   // Citas
   fetchAppointments: (params?: any) => Promise<void>;
-  fetchAppointmentsByRange: (startDate: string, endDate: string) => Promise<any[]>;
-  createAppointment: (appointment: any) => Promise<{ ok: boolean }>;
-  updateAppointment: (id: string, appointment: any) => Promise<{ ok: boolean }>;
-  
-  // Historial
-  fetchClientHistory: (clientId: string) => Promise<any>;
-  createHistoryRecord: (record: any) => Promise<{ ok: boolean }>;
+  fetchAppointment: (id: string) => Promise<any>;
+  createAppointment: (appointment: any) => Promise<{ success: boolean; data?: any }>;
+  updateAppointment: (id: string, appointment: any) => Promise<{ success: boolean; data?: any }>;
+  updateAppointmentStatus: (id: string, status: string) => Promise<{ success: boolean; data?: any }>;
   
   // Utilidades
   clearError: () => void;
-  setSelectedClient: (client: any) => void;
+  setSelectedOwner: (owner: any) => void;
+  setSelectedPet: (pet: any) => void;
 }
 
 const ClinicContext = createContext<ClinicContextType | undefined>(undefined);
 
 export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [clients, setClients] = useState<any[]>([]);
+  const [owners, setOwners] = useState<any[]>([]);
+  const [pets, setPets] = useState<any[]>([]);
   const [appointments, setAppointments] = useState<any[]>([]);
-  const [selectedClient, setSelectedClient] = useState<any | null>(null);
+  const [selectedOwner, setSelectedOwner] = useState<any | null>(null);
+  const [selectedPet, setSelectedPet] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchClients = useCallback(async (params?: any) => {
+  // Dueños
+  const fetchOwners = useCallback(async (params?: any) => {
     setLoading(true);
     try {
-      const response = await clinicApi.getClientsRequest(params);
-      setClients(response.data.clients || response.data);
+      const response = await clinicApi.getOwnersRequest(params);
+      setOwners(response.data.owners || []);
       setError(null);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Error al cargar clientes');
+      setError(err.response?.data?.message || 'Error al cargar dueños');
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const fetchClient = useCallback(async (id: string) => {
+  const fetchOwner = useCallback(async (id: string) => {
     setLoading(true);
     try {
-      const response = await clinicApi.getClientRequest(id);
+      const response = await clinicApi.getOwnerRequest(id);
       setError(null);
-      return response.data;
+      return response.data.owner;
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Error al cargar cliente');
+      setError(err.response?.data?.message || 'Error al cargar dueño');
       return null;
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const createClient = useCallback(async (client: any) => {
+  const createOwner = useCallback(async (owner: any) => {
     setLoading(true);
     try {
-      await clinicApi.createClientRequest(client);
-      await fetchClients(); // Refrescar lista
+      const response = await clinicApi.createOwnerRequest(owner);
+      await fetchOwners(); // Refrescar lista
       setError(null);
-      return { ok: true };
+      return { 
+        success: true, 
+        data: response.data.owner,
+        message: response.data.message 
+      };
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Error al crear cliente');
-      return { ok: false };
+      const errorMsg = err.response?.data?.message || 'Error al crear dueño';
+      setError(errorMsg);
+      return { 
+        success: false, 
+        message: errorMsg 
+      };
     } finally {
       setLoading(false);
     }
-  }, [fetchClients]);
+  }, [fetchOwners]);
 
-  const fetchAppointments = useCallback(async (params?: any) => {
+  // Mascotas
+  const fetchPets = useCallback(async (params?: any) => {
     setLoading(true);
     try {
-      const response = await clinicApi.getAppointmentsRequest(params);
-      setAppointments(response.data.appointments || response.data);
+      const response = await clinicApi.getPetsRequest(params);
+      setPets(response.data.pets || []);
       setError(null);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Error al cargar citas');
+      setError(err.response?.data?.message || 'Error al cargar mascotas');
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const fetchAppointmentsByRange = useCallback(async (startDate: string, endDate: string) => {
+  const createPet = useCallback(async (pet: any) => {
     setLoading(true);
     try {
-      const response = await clinicApi.getAppointmentsByRangeRequest(startDate, endDate);
+      const response = await clinicApi.createPetRequest(pet);
+      await fetchPets(); // Refrescar lista
       setError(null);
-      return response.data;
+      return { 
+        success: true, 
+        data: response.data.pet,
+        message: response.data.message 
+      };
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.message || 'Error al crear mascota';
+      setError(errorMsg);
+      return { 
+        success: false, 
+        message: errorMsg 
+      };
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchPets]);
+
+  // Citas
+  const fetchAppointments = useCallback(async (params?: any) => {
+    setLoading(true);
+    try {
+      const response = await clinicApi.getAppointmentsRequest(params);
+      setAppointments(response.data.appointments || []);
+      setError(null);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Error al cargar citas');
-      return [];
     } finally {
       setLoading(false);
     }
@@ -113,41 +152,47 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const createAppointment = useCallback(async (appointment: any) => {
     setLoading(true);
     try {
-      await clinicApi.createAppointmentRequest(appointment);
+      const response = await clinicApi.createAppointmentRequest(appointment);
       await fetchAppointments(); // Refrescar lista
       setError(null);
-      return { ok: true };
+      return { 
+        success: true, 
+        data: response.data.appointment,
+        message: response.data.message 
+      };
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Error al crear cita');
-      return { ok: false };
+      const errorMsg = err.response?.data?.message || 'Error al crear cita';
+      setError(errorMsg);
+      return { 
+        success: false, 
+        message: errorMsg 
+      };
     } finally {
       setLoading(false);
     }
   }, [fetchAppointments]);
 
-  const fetchClientHistory = useCallback(async (clientId: string) => {
+  const updateAppointmentStatus = useCallback(async (id: string, status: string) => {
     setLoading(true);
     try {
-      const response = await clinicApi.getClientHistoryRequest(clientId);
+      const response = await clinicApi.updateAppointmentStatusRequest(id, status);
+      // Actualizar en el estado local
+      setAppointments(prev => prev.map(apt => 
+        apt._id === id ? { ...apt, status } : apt
+      ));
       setError(null);
-      return response.data;
+      return { 
+        success: true, 
+        data: response.data.appointment,
+        message: response.data.message 
+      };
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Error al cargar historial');
-      return { history: [], clientInfo: null };
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const createHistoryRecord = useCallback(async (record: any) => {
-    setLoading(true);
-    try {
-      await clinicApi.createHistoryRecordRequest(record);
-      setError(null);
-      return { ok: true };
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Error al crear registro');
-      return { ok: false };
+      const errorMsg = err.response?.data?.message || 'Error al actualizar estado';
+      setError(errorMsg);
+      return { 
+        success: false, 
+        message: errorMsg 
+      };
     } finally {
       setLoading(false);
     }
@@ -155,54 +200,116 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const clearError = useCallback(() => setError(null), []);
 
+
+  
+const deleteOwner = useCallback(async (id: string) => {
+  setLoading(true);
+  try {
+    const response = await clinicApi.deleteOwnerRequest(id);
+    await fetchOwners(); // Refrescar lista
+    setError(null);
+    return { 
+      success: true, 
+      message: response.data?.message || 'Cliente eliminado'
+    };
+  } catch (err: any) {
+    const errorMsg = err.response?.data?.message || 'Error al eliminar cliente';
+    setError(errorMsg);
+    return { 
+      success: false, 
+      message: errorMsg 
+    };
+  } finally {
+    setLoading(false);
+  }
+}, [fetchOwners]);
+
   return (
     <ClinicContext.Provider
       value={{
-        clients,
+        owners,
+        pets,
         appointments,
-        selectedClient,
+        selectedOwner,
+        selectedPet,
         loading,
-        error,
-        fetchClients,
-        fetchClient,
-        createClient,
-        updateClient: async (id: string, client: any) => {
+        error,  
+        fetchOwners,
+        fetchOwner,
+        createOwner,
+         deleteOwner, 
+
+        updateOwner: async (id: string, owner: any) => {
           try {
-            await clinicApi.updateClientRequest(id, client);
-            await fetchClients();
-            return { ok: true };
+            const response = await clinicApi.updateOwnerRequest(id, owner);
+            await fetchOwners();
+            return { 
+              success: true, 
+              data: response.data.owner,
+              message: response.data.message 
+            };
           } catch (err: any) {
-            setError(err.response?.data?.message || 'Error al actualizar');
-            return { ok: false };
+            const errorMsg = err.response?.data?.message || 'Error al actualizar';
+            setError(errorMsg);
+            return { success: false, message: errorMsg };
           }
         },
-        deleteClient: async (id: string) => {
+        fetchPets,
+        fetchPet: async (id: string) => {
           try {
-            await clinicApi.deleteClientRequest(id);
-            await fetchClients();
-            return { ok: true };
+            const response = await clinicApi.getPetRequest(id);
+            return response.data.pet;
           } catch (err: any) {
-            setError(err.response?.data?.message || 'Error al eliminar');
-            return { ok: false };
+            setError(err.response?.data?.message || 'Error al cargar mascota');
+            return null;
+          }
+        },
+        createPet,
+        updatePet: async (id: string, pet: any) => {
+          try {
+            const response = await clinicApi.updatePetRequest(id, pet);
+            await fetchPets();
+            return { 
+              success: true, 
+              data: response.data.pet,
+              message: response.data.message 
+            };
+          } catch (err: any) {
+            const errorMsg = err.response?.data?.message || 'Error al actualizar';
+            setError(errorMsg);
+            return { success: false, message: errorMsg };
           }
         },
         fetchAppointments,
-        fetchAppointmentsByRange,
+        fetchAppointment: async (id: string) => {
+          try {
+            const response = await clinicApi.getAppointmentRequest(id);
+            return response.data.appointment;
+          } catch (err: any) {
+            setError(err.response?.data?.message || 'Error al cargar cita');
+            return null;
+          }
+        },
         createAppointment,
         updateAppointment: async (id: string, appointment: any) => {
           try {
-            await clinicApi.updateAppointmentRequest(id, appointment);
+            const response = await clinicApi.updateAppointmentRequest(id, appointment);
             await fetchAppointments();
-            return { ok: true };
+            return { 
+              success: true, 
+              data: response.data.appointment,
+              message: response.data.message 
+            };
           } catch (err: any) {
-            setError(err.response?.data?.message || 'Error al actualizar');
-            return { ok: false };
+            const errorMsg = err.response?.data?.message || 'Error al actualizar';
+            setError(errorMsg);
+            return { success: false, message: errorMsg };
           }
         },
-        fetchClientHistory,
-        createHistoryRecord,
+        updateAppointmentStatus,
         clearError,
-        setSelectedClient
+        setSelectedOwner,
+        setSelectedPet
       }}
     >
       {children}

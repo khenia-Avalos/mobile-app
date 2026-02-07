@@ -1,23 +1,30 @@
+// src/navigation/MainNavigator.tsx
 import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useAuth } from '../hooks/useAuth';
+
+// PANTALLAS PÚBLICAS
 import HomeScreen from '../screens/HomeScreen';
 import LoginScreen from '../screens/Auth/LoginScreen';
 import RegisterScreen from '../screens/Auth/RegisterScreen';
-import TasksScreen from '../screens/Tasks/TasksScreen';
-import TaskFormScreen from '../screens/Tasks/TaskFormScreen';
-import ProfileScreen from '../screens/ProfileScreen';
 import ForgotPasswordScreen from '../screens/Auth/ForgotPasswordScreen';
 import ResetPasswordScreen from '../screens/Auth/ResetPasswordScreen';
 
-
-
-
+// PANTALLAS AUTENTICADAS (CLÍNICA)
 import DashboardScreen from '../screens/Clinic/DashboardScreen';
-// import ClientsScreen from '../screens/Clinic/ClientsScreen';
-// import ClientFormScreen from '../screens/Clinic/ClientFormScreen';
+import OwnersScreen from '../screens/Clinic/OwnersScreen';
+import OwnerFormScreen from '../screens/Clinic/OwnerFormScreen';
+import AppointmentFormScreen from '../screens/Clinic/AppointmentFormScreen';
+
+// PANTALLAS AUTENTICADAS (TAREAS EXISTENTES)
+import TasksScreen from '../screens/Tasks/TasksScreen';
+import TaskFormScreen from '../screens/Tasks/TaskFormScreen';
+import ProfileScreen from '../screens/ProfileScreen';
+
+// TEMPORAL: Pantallas que aún no existen (comentadas)
+// import PetFormScreen from '../screens/Clinic/PetFormScreen';
 // import AppointmentsScreen from '../screens/Clinic/AppointmentsScreen';
-// import AppointmentFormScreen from '../screens/Clinic/AppointmentFormScreen';
+// import CalendarScreen from '../screens/Clinic/CalendarScreen';
 
 const Stack = createStackNavigator();
 
@@ -25,7 +32,7 @@ export default function MainNavigator() {
   const { isAuthenticated, authChecked } = useAuth();
 
   if (!authChecked) {
-    return null; // O un loading screen
+    return null;
   }
 
   return (
@@ -33,14 +40,25 @@ export default function MainNavigator() {
       {isAuthenticated ? (
         // USUARIO AUTENTICADO
         <>
-          <Stack.Screen name="Home" component={HomeScreen} />
+          {/* PANEL DE CONTROL */}
+          <Stack.Screen name="Dashboard" component={DashboardScreen} />
+          
+          {/* CLIENTES */}
+          <Stack.Screen name="Owners" component={OwnersScreen} />
+          <Stack.Screen name="OwnerForm" component={OwnerFormScreen} />
+          
+          {/* CITAS */}
+          <Stack.Screen name="AppointmentForm" component={AppointmentFormScreen} />
+          
+          {/* TEMPORAL: Comentar estas líneas hasta crear las pantallas */}
+          {/* <Stack.Screen name="Appointments" component={AppointmentsScreen} /> */}
+          {/* <Stack.Screen name="Calendar" component={CalendarScreen} /> */}
+          {/* <Stack.Screen name="PetForm" component={PetFormScreen} /> */}
+          
+          {/* TAREAS EXISTENTES */}
           <Stack.Screen name="Tasks" component={TasksScreen} />
           <Stack.Screen name="TaskForm" component={TaskFormScreen} />
           <Stack.Screen name="Profile" component={ProfileScreen} />
-
-
-           <Stack.Screen name="Dashboard" component={DashboardScreen} />
-
         </>
       ) : (
         // USUARIO NO AUTENTICADO
@@ -55,8 +73,3 @@ export default function MainNavigator() {
     </Stack.Navigator>
   );
 }
-
-//ESTE REMPLAZA AL NAVBAR
-/* Navegación principal
-	Mobile usa stack navigation (pila), no navbar fijo	
-  Stack.Navigator maneja transiciones entre pantallas como pila (push/pop) */

@@ -1,42 +1,43 @@
-// src/api/clinic.ts
 import axios from './axios';
 
-// Clientes
-export const getClientsRequest = (params?: any) => 
-  axios.get('/clients', { params });
-export const getClientRequest = (id: string) => 
-  axios.get(`/clients/${id}`);
-export const createClientRequest = (client: any) => 
-  axios.post('/clients', client);
-export const updateClientRequest = (id: string, client: any) => 
-  axios.put(`/clients/${id}`, client);
-export const deleteClientRequest = (id: string) => 
-  axios.delete(`/clients/${id}`);
-export const getClientStatsRequest = () => 
-  axios.get('/clients/stats');
+// Owners API
+export const getOwnersRequest = (params?: any) => 
+  axios.get('/owners', { params });
+export const getOwnerRequest = (id: string) => 
+  axios.get(`/owners/${id}`);
+export const createOwnerRequest = (owner: any) => 
+  axios.post('/owners', owner);
+export const updateOwnerRequest = (id: string, owner: any) => 
+  axios.put(`/owners/${id}`, owner);
+export const deleteOwnerRequest = (id: string) => 
+  axios.delete(`/owners/${id}`);
 
-// Citas
+// Pets API
+export const getPetsRequest = (params?: any) => 
+  axios.get('/pets', { params });
+export const getPetRequest = (id: string) => 
+  axios.get(`/pets/${id}`);
+export const createPetRequest = (pet: any) => 
+  axios.post('/pets', pet);
+export const updatePetRequest = (id: string, pet: any) => 
+  axios.put(`/pets/${id}`, pet);
+export const deletePetRequest = (id: string) => 
+  axios.delete(`/pets/${id}`);
+export const addVaccinationRequest = (id: string, vaccination: any) => 
+  axios.post(`/pets/${id}/vaccinations`, { vaccination });
+
+// Appointments API
 export const getAppointmentsRequest = (params?: any) => 
   axios.get('/appointments', { params });
-export const getAppointmentsByRangeRequest = (startDate: string, endDate: string) => 
-  axios.get('/appointments/range', { params: { startDate, endDate } });
+export const getAppointmentRequest = (id: string) => 
+  axios.get(`/appointments/${id}`);
 export const createAppointmentRequest = (appointment: any) => 
   axios.post('/appointments', appointment);
 export const updateAppointmentRequest = (id: string, appointment: any) => 
   axios.put(`/appointments/${id}`, appointment);
 export const updateAppointmentStatusRequest = (id: string, status: string) => 
   axios.patch(`/appointments/${id}/status`, { status });
-export const getAppointmentStatsRequest = () => 
+export const deleteAppointmentRequest = (id: string) => 
+  axios.delete(`/appointments/${id}`);
+export const getAppointmentsStatsRequest = () => 
   axios.get('/appointments/stats');
-
-// Historial médico
-export const getClientHistoryRequest = (clientId: string, params?: any) => 
-  axios.get(`/history/client/${clientId}`, { params });
-export const createHistoryRecordRequest = (record: any) => 
-  axios.post('/history', record);
-export const getHistoryRecordRequest = (id: string) => 
-  axios.get(`/history/${id}`);
-export const updateHistoryRecordRequest = (id: string, record: any) => 
-  axios.put(`/history/${id}`, record);
-export const getHistorySummaryRequest = (clientId?: string) => 
-  axios.get(`/history/summary/${clientId || ''}`);

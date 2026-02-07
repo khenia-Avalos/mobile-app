@@ -1,8 +1,3 @@
-	// Inicio
-  // se cambio porque	Tailwind → StyleSheet porque RN no soporta CSS	
-  // StyleSheet.create() crea objetos de estilo que RN renderiza nativamente
-
-
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
@@ -16,38 +11,97 @@ export default function HomeScreen() {
     return (
       <ScrollView style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.title}>¡Hola, {user?.username}!</Text>
-          <Text style={styles.subtitle}>Tu panel de gestión está listo</Text>
+          <Text style={styles.title}>¡Hola, {user?.username}! 👋</Text>
+          <Text style={styles.subtitle}>¿Qué deseas hacer hoy?</Text>
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>📅 Ir a mi Agenda</Text>
+        {/* SECCIÓN NUEVA: CLÍNICA VETERINARIA */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>🏥 Clínica Veterinaria</Text>
+          
+          {/* Botón principal para Dashboard */}
           <TouchableOpacity 
-            style={styles.button}
-            onPress={() => navigation.navigate('Tasks' as never)}
+            style={styles.primaryButton}
+            onPress={() => navigation.navigate('Dashboard' as never)}
           >
-            <Text style={styles.buttonText}>Ver Tareas</Text>
+            <Text style={styles.buttonIcon}>📊</Text>
+            <View style={styles.buttonTextContainer}>
+              <Text style={styles.primaryButtonText}>Dashboard de Clínica</Text>
+              <Text style={styles.buttonSubtext}>Gestión completa de pacientes y citas</Text>
+            </View>
+            <Text style={styles.chevron}>→</Text>
           </TouchableOpacity>
+
+          {/* Grid de opciones rápidas */}
+          <View style={styles.grid}>
+            <TouchableOpacity 
+              style={styles.gridItem}
+              onPress={() => navigation.navigate('Clients' as never)}
+            >
+              <Text style={styles.gridIcon}>🐕</Text>
+              <Text style={styles.gridText}>Pacientes</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.gridItem}
+              onPress={() => navigation.navigate('ClientForm' as never)}
+            >
+              <Text style={styles.gridIcon}>➕</Text>
+              <Text style={styles.gridText}>Nuevo Paciente</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.gridItem}
+              onPress={() => navigation.navigate('Appointments' as never)}
+            >
+              <Text style={styles.gridIcon}>📅</Text>
+              <Text style={styles.gridText}>Citas</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.gridItem}
+              onPress={() => navigation.navigate('AppointmentForm' as never)}
+            >
+              <Text style={styles.gridIcon}>⏰</Text>
+              <Text style={styles.gridText}>Nueva Cita</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>👤 Perfil</Text>
-          <TouchableOpacity 
-            style={styles.buttonSecondary}
-            onPress={() => navigation.navigate('Profile' as never)}
-          >
-            <Text style={styles.buttonTextSecondary}>Ver Perfil</Text>
-          </TouchableOpacity>
+        {/* SECCIÓN EXISTENTE: TAREAS */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>📝 Sistema Actual</Text>
+          
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Tareas</Text>
+            <TouchableOpacity 
+              style={styles.button}
+              onPress={() => navigation.navigate('Tasks' as never)}
+            >
+              <Text style={styles.buttonText}>Ver Mis Tareas</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Perfil</Text>
+            <TouchableOpacity 
+              style={styles.buttonSecondary}
+              onPress={() => navigation.navigate('Profile' as never)}
+            >
+              <Text style={styles.buttonTextSecondary}>Ver Mi Perfil</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </ScrollView>
     );
   }
 
+  // USUARIO NO AUTENTICADO (se mantiene igual)
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Veterinaria</Text>
-        <Text style={styles.subtitle}>Gestiona tu agenda y clientes</Text>
+        <Text style={styles.subtitle}>Sistema de Gestión Veterinaria</Text>
       </View>
 
       <View style={styles.card}>
@@ -78,7 +132,7 @@ const styles = StyleSheet.create({
   },
   header: {
     marginTop: 50,
-    marginBottom: 40,
+    marginBottom: 30,
     alignItems: 'center',
   },
   title: {
@@ -90,12 +144,95 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     color: '#64748b',
+    textAlign: 'center',
   },
+  
+  // Secciones
+  section: {
+    marginBottom: 30,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#0f172a',
+    marginBottom: 16,
+  },
+  
+  // Botón principal de clínica
+  primaryButton: {
+    backgroundColor: 'white',
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+    borderLeftWidth: 4,
+    borderLeftColor: '#0891b2',
+  },
+  buttonIcon: {
+    fontSize: 28,
+    marginRight: 15,
+  },
+  buttonTextContainer: {
+    flex: 1,
+  },
+  primaryButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#0f172a',
+  },
+  buttonSubtext: {
+    fontSize: 14,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  chevron: {
+    fontSize: 20,
+    color: '#94a3b8',
+  },
+  
+  // Grid de opciones
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  gridItem: {
+    backgroundColor: 'white',
+    width: '48%',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  gridIcon: {
+    fontSize: 24,
+    marginBottom: 8,
+  },
+  gridText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0f172a',
+    textAlign: 'center',
+  },
+  
+  // Cards existentes (tareas y perfil)
   card: {
     backgroundColor: 'white',
     borderRadius: 16,
-    padding: 24,
-    marginBottom: 20,
+    padding: 20,
+    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -103,17 +240,16 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   cardTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '600',
     color: '#0f172a',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   button: {
     backgroundColor: '#0891b2',
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
-    marginBottom: 12,
   },
   buttonText: {
     color: 'white',
