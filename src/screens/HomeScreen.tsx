@@ -113,12 +113,6 @@ export default function HomeScreen() {
           <Text style={styles.buttonText}>Iniciar Sesión</Text>
         </TouchableOpacity>
         
-        <TouchableOpacity 
-          style={styles.buttonSecondary}
-          onPress={() => navigation.navigate('Register' as never)}
-        >
-          <Text style={styles.buttonTextSecondary}>Registrarse</Text>
-        </TouchableOpacity>
       </View>
     </View>
   );

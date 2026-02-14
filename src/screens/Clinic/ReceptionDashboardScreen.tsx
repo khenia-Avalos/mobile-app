@@ -1,5 +1,5 @@
-// src/screens/Clinic/DashboardScreen.tsx
-import React, { useEffect, useState } from 'react';
+// src/screens/Clinic/ReceptionDashboardScreen.tsx
+import React, { useEffect, useState, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -9,11 +9,11 @@ import {
   RefreshControl,
   Alert 
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { useClinic } from '../../contexts/ClinicContext';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../hooks/useAuth';
+import { useClinic } from '../../contexts/ClinicContext';
 
-export default function DashboardScreen() {
+export default function ReceptionDashboardScreen() {
   const navigation = useNavigation();
   const { user, logout } = useAuth();
   const { 
@@ -21,41 +21,76 @@ export default function DashboardScreen() {
     pets, 
     appointments, 
     fetchOwners, 
-    fetchPets,
+    fetchPets, 
     fetchAppointments,
     loading 
   } = useClinic();
   
   const [refreshing, setRefreshing] = useState(false);
   const [todayAppointments, setTodayAppointments] = useState<any[]>([]);
-  
+  const [dataLoaded, setDataLoaded] = useState(false);
+
+  const loadData = useCallback(async () => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      console.log('Cargando datos para recepción - fecha:', today);
+      
+      // Cargar todos los datos sin filtros
+      const [ownersData, petsData, appointmentsData] = await Promise.all([
+        fetchOwners(),
+        fetchPets(),
+        fetchAppointments({ date: today })
+      ]);
+      
+      console.log('📊 Datos cargados:', {
+        owners: ownersData?.length || 0,
+        pets: petsData?.length || 0,
+        appointments: appointmentsData?.length || 0
+      });
+      
+      setDataLoaded(true);
+    } catch (error) {
+      console.error('Error cargando datos:', error);
+      Alert.alert(
+        'Error',
+        'No se pudieron cargar los datos. Intente nuevamente.',
+        [{ text: 'OK' }]
+      );
+    }
+  }, [fetchOwners, fetchPets, fetchAppointments]);
+
+  // Cargar datos cuando la pantalla obtiene foco
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
+
   useEffect(() => {
     loadData();
-  }, []);
-  
-  const loadData = async () => {
-    const today = new Date().toISOString().split('T')[0];
-    await Promise.all([
-      fetchOwners(),
-      fetchPets(),
-      fetchAppointments({ date: today })
-    ]);
-  };
-  
+  }, [loadData]);
+
   const onRefresh = async () => {
     setRefreshing(true);
     await loadData();
     setRefreshing(false);
   };
-  
-  // Filtrar citas de hoy programadas/confirmadas
+
+  // Actualizar citas de hoy cuando cambien las citas
   useEffect(() => {
-    const todayApts = appointments.filter(apt => 
-      apt.status === 'scheduled' || apt.status === 'confirmed'
-    );
-    setTodayAppointments(todayApts);
+    console.log('🔄 Actualizando citas de hoy. Total citas:', appointments?.length);
+    
+    if (appointments && appointments.length > 0) {
+      const todayApts = appointments.filter((apt: any) => 
+        apt.status === 'scheduled' || apt.status === 'confirmed'
+      );
+      setTodayAppointments(todayApts);
+      console.log('📅 Citas de hoy filtradas:', todayApts.length);
+    } else {
+      setTodayAppointments([]);
+    }
   }, [appointments]);
-  
+
   const handleLogout = async () => {
     Alert.alert(
       'Cerrar Sesión',
@@ -72,21 +107,16 @@ export default function DashboardScreen() {
       ]
     );
   };
-  
-  const handleRegisterNavigation = () => {
-    // Verificar si el usuario es administrador
-    if (user?.role === 'admin') {
-      // Navegar a la pantalla de registro
-      navigation.navigate('Register' as never);
-    } else {
-      Alert.alert(
-        'Acceso Restringido',
-        'Solo los administradores pueden registrar nuevos usuarios.',
-        [{ text: 'OK' }]
-      );
-    }
-  };
-  
+
+  // Mostrar indicador de carga
+  if (!dataLoaded && loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Cargando datos...</Text>
+      </View>
+    );
+  }
+
   return (
     <ScrollView 
       style={styles.container}
@@ -95,19 +125,18 @@ export default function DashboardScreen() {
       }
     >
       <View style={styles.header}>
-  <View>
-    <TouchableOpacity onPress={() => navigation.navigate('Profile' as never)}>
-      <Text style={styles.welcome}>
-        Hola, Dr. {user?.username} 
-      </Text>
-    </TouchableOpacity>
-    <Text style={styles.subtitle}>
-      Clínica Veterinaria - Administración
-    </Text>
-  </View>
+        <View>
+          <TouchableOpacity onPress={() => navigation.navigate('Profile' as never)}>
+            <Text style={styles.welcome}>
+              Hola, {user?.username} 👋
+            </Text>
+          </TouchableOpacity>
+          <Text style={styles.subtitle}>
+            Recepción - Clínica Veterinaria
+          </Text>
+        </View>
         
         <View style={styles.headerButtons}>
-          
           <TouchableOpacity 
             style={styles.logoutButton}
             onPress={handleLogout}
@@ -122,7 +151,7 @@ export default function DashboardScreen() {
           style={styles.statCard}
           onPress={() => navigation.navigate('Owners' as never)}
         >
-          <Text style={styles.statNumber}>{owners.length}</Text>
+          <Text style={styles.statNumber}>{owners?.length || 0}</Text>
           <Text style={styles.statLabel}>Clientes</Text>
         </TouchableOpacity>
         
@@ -131,26 +160,20 @@ export default function DashboardScreen() {
           onPress={() => {
             Alert.alert(
               'Mascotas', 
-              `${pets.length} mascotas registradas.`,
+              `${pets?.length || 0} mascotas registradas.`,
               [{ text: 'OK' }]
             );
           }}
         >
-          <Text style={styles.statNumber}>{pets.length}</Text>
+          <Text style={styles.statNumber}>{pets?.length || 0}</Text>
           <Text style={styles.statLabel}>Pacientes</Text>
         </TouchableOpacity>
         
         <TouchableOpacity 
           style={styles.statCard}
-          onPress={() => {
-            Alert.alert(
-              'Citas Hoy', 
-              `${todayAppointments.length} citas programadas para hoy.`,
-              [{ text: 'OK' }]
-            );
-          }}
+          onPress={() => navigation.navigate('Appointments' as never)}
         >
-          <Text style={styles.statNumber}>{todayAppointments.length}</Text>
+          <Text style={styles.statNumber}>{todayAppointments?.length || 0}</Text>
           <Text style={styles.statLabel}>Citas Hoy</Text>
         </TouchableOpacity>
       </View>
@@ -158,7 +181,6 @@ export default function DashboardScreen() {
       <View style={styles.quickActions}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Acciones Rápidas</Text>
-        
         </View>
         
         <View style={styles.actionsGrid}>
@@ -192,37 +214,28 @@ export default function DashboardScreen() {
             onPress={() => navigation.navigate('AppointmentForm' as never)}
           >
             <Text style={styles.actionIcon}>📅</Text>
-            <Text style={styles.actionText}>Nueva Cita</Text>
+            <Text style={styles.actionText}>Agendar Cita</Text>
           </TouchableOpacity>
           
-          {user?.role === 'admin' && (
-            <TouchableOpacity 
-              style={styles.actionButton}
-              onPress={handleRegisterNavigation}
-            >
-              <Text style={styles.actionIcon}>👥</Text>
-              <Text style={styles.actionText}>Registrar Usuario</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => navigation.navigate('Appointments' as never)}
+          >
+            <Text style={styles.actionIcon}>📋</Text>
+            <Text style={styles.actionText}>Ver Agenda</Text>
+          </TouchableOpacity>
         </View>
       </View>
       
-      {/* Citas de hoy */}
       <View style={styles.todaySection}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Citas para hoy</Text>
-          <TouchableOpacity onPress={() => {
-            Alert.alert(
-              'Próximamente',
-              'Lista completa de citas en desarrollo.',
-              [{ text: 'OK' }]
-            );
-          }}>
+          <TouchableOpacity onPress={() => navigation.navigate('Appointments' as never)}>
             <Text style={styles.seeAll}>Ver todas</Text>
           </TouchableOpacity>
         </View>
         
-        {todayAppointments.length === 0 ? (
+        {!todayAppointments || todayAppointments.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>No hay citas para hoy</Text>
             <TouchableOpacity 
@@ -241,12 +254,19 @@ export default function DashboardScreen() {
                 Alert.alert(
                   'Detalle de Cita',
                   `${apt.title}\n\n` +
-                  ` ${new Date(apt.appointmentDate).toLocaleDateString('es-ES')}\n` +
-                  ` ${apt.startTime} - ${apt.endTime}\n` +
-                  ` ${apt.pet?.name || 'Sin mascota'}\n` +
-                  ` ${apt.owner?.firstName || ''} ${apt.owner?.lastName || ''}\n` +
-                  ` ${apt.description || 'Sin descripción'}`,
-                  [{ text: 'OK' }]
+                  `📅 ${new Date(apt.appointmentDate).toLocaleDateString('es-ES')}\n` +
+                  `⏰ ${apt.startTime} - ${apt.endTime}\n` +
+                  `🐾 ${apt.pet?.name || 'Sin mascota'}\n` +
+                  `👤 ${apt.owner?.firstName || ''} ${apt.owner?.lastName || ''}\n` +
+                  `📞 ${apt.owner?.phone || 'Sin teléfono'}\n` +
+                  `📝 ${apt.description || 'Sin descripción'}`,
+                  [
+                    { text: 'Cerrar', style: 'cancel' },
+                    { 
+                      text: 'Ver en Agenda', 
+                      onPress: () => navigation.navigate('Appointments' as never)
+                    }
+                  ]
                 );
               }}
             >
@@ -257,12 +277,12 @@ export default function DashboardScreen() {
                 <Text style={styles.aptTitle}>{apt.title}</Text>
                 {apt.pet && (
                   <Text style={styles.aptPet}>
-                     {apt.pet.name} ({apt.pet.species})
+                    🐾 {apt.pet.name} ({apt.pet.species})
                   </Text>
                 )}
                 {apt.owner && (
                   <Text style={styles.aptOwner}>
-                     {apt.owner.firstName} {apt.owner.lastName}
+                    👤 {apt.owner.firstName} {apt.owner.lastName}
                   </Text>
                 )}
               </View>
@@ -278,7 +298,23 @@ export default function DashboardScreen() {
           ))
         )}
       </View>
-     
+      
+      <View style={styles.quickNotes}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Recordatorios</Text>
+        </View>
+        <View style={styles.noteCard}>
+          <Text style={styles.noteText}>
+            • Verificar disponibilidad de veterinarios antes de agendar citas
+          </Text>
+          <Text style={styles.noteText}>
+            • Confirmar citas con 24 horas de anticipación
+          </Text>
+          <Text style={styles.noteText}>
+            • Registrar alergias y condiciones especiales de mascotas
+          </Text>
+        </View>
+      </View>
     </ScrollView>
   );
 }
@@ -318,7 +354,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     paddingTop: 40,
-    backgroundColor: '#16adbb',
+    backgroundColor: '#0f766e',
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
   },
@@ -336,19 +372,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  buttonSecondary: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  buttonTextSecondary: {
-    color: 'white',
-    fontWeight: '600',
-    fontSize: 12,
   },
   logoutButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
@@ -412,17 +435,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#0f172a',
-  },
-  registerButton: {
-    backgroundColor: '#8b5cf6',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  registerButtonText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '600',
   },
   actionsGrid: {
     flexDirection: 'row',
@@ -532,7 +544,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
   },
-  upcomingSection: {
+  quickNotes: {
     padding: 16,
     backgroundColor: 'white',
     marginHorizontal: 16,
@@ -544,25 +556,27 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
-  upcomingCard: {
-    backgroundColor: '#f8fafc',
+  noteCard: {
+    backgroundColor: '#f0f9ff',
     borderRadius: 12,
     padding: 16,
-    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#bae6fd',
   },
-  upcomingDate: {
-    fontSize: 12,
-    color: '#64748b',
-    marginBottom: 4,
-  },
-  upcomingTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#0f172a',
-    marginBottom: 2,
-  },
-  upcomingTime: {
+  noteText: {
     fontSize: 14,
-    color: '#64748b',
+    color: '#0c4a6e',
+    marginBottom: 8,
+    lineHeight: 20,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#0f172a',
   },
 });

@@ -1,4 +1,4 @@
-// src/screens/Clinic/OwnersScreen.tsx
+// mobile-app/src/screens/Clinic/OwnersScreen.tsx
 import React, { useEffect } from 'react';
 import { 
   View, 
@@ -28,15 +28,33 @@ export default function OwnersScreen() {
   const handleDelete = (ownerId: string, ownerName: string) => {
     Alert.alert(
       'Eliminar Cliente',
-      `¿Eliminar a ${ownerName}?`,
+      `¿Estás seguro de eliminar a ${ownerName}?\n\n`,
       [
         { text: 'Cancelar', style: 'cancel' },
         { 
           text: 'Eliminar', 
           style: 'destructive',
           onPress: async () => {
-            await deleteOwner(ownerId);
-            fetchOwners();
+            try {
+              const result = await deleteOwner(ownerId);
+              
+              if (result.success) {
+                Alert.alert(' Éxito', 'Cliente eliminado correctamente');
+                // NO llamar a fetchOwners() - el estado ya se actualizó en el context
+              } else {
+                if (result.message.includes('mascotas activas')) {
+                  Alert.alert(
+                    '❌ No se puede eliminar', 
+                    'Este cliente tiene mascotas activas. Debes archivar o transferir las mascotas primero.'
+                  );
+                } else {
+                  Alert.alert('❌ Error', result.message);
+                }
+              }
+            } catch (error) {
+              console.error('Error eliminando cliente:', error);
+              Alert.alert('❌ Error', 'Ocurrió un error al eliminar el cliente');
+            }
           }
         },
       ]
@@ -53,10 +71,10 @@ export default function OwnersScreen() {
           {item.firstName} {item.lastName}
         </Text>
         <Text style={styles.ownerContact}>
-          📞 {item.phone} • 📧 {item.email}
+           {item.phone} •  {item.email}
         </Text>
         <Text style={styles.ownerPets}>
-          🐾 {item.petCount || 0} mascotas
+          {item.petCount || 0} mascotas
         </Text>
       </View>
       <View style={styles.ownerActions}>
@@ -125,7 +143,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     paddingTop: 60,
-    backgroundColor: '#0f766e',
+    backgroundColor: '#219eb4',
   },
   title: {
     fontSize: 24,
@@ -133,7 +151,7 @@ const styles = StyleSheet.create({
     color: 'white',
   },
   addButton: {
-    backgroundColor: '#22c55e',
+    backgroundColor: '#a5b2a9',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,

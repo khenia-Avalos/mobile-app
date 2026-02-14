@@ -1,102 +1,49 @@
+// mobile-app/src/api/axios-mobile.ts
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Worker URL para MOBILE - SIN barra al final
-const WORKER_URL = 'https://veteapp-proxy.kheniafuentesavalos.workers.dev';
-
 const instance = axios.create({
-  baseURL: WORKER_URL,
+  baseURL: 'https://backend-internal-platform.onrender.com',
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
-    'Accept': 'application/json',
-    'X-Client': 'agendapro-mobile',
   },
 });
 
-// Generar ID único para cada request
-const generateRequestId = () => {
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-};
+// Request interceptor
+instance.interceptors.request.use(
+  async (config) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+        console.log(`🔐 Token agregado a: ${config.method?.toUpperCase()} ${config.url}`);
+      }
+    } catch (error) {
+      console.warn('⚠️ Error getting token:', error);
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
 
-// INTERCEPTOR DE REQUEST - SOLO MOBILE
-instance.interceptors.request.use(async (config) => {
-  // Generar ID único
-  const requestId = generateRequestId();
-  config.headers['X-Request-ID'] = requestId;
-  
-  // Obtener token SOLO desde AsyncStorage (mobile)
-  let token: string | null = null;
-  
-  try {
-    token = await AsyncStorage.getItem('token');
-  } catch (error) {
-    console.warn('⚠️ Error obteniendo token mobile:', error);
-  }
-  
-  // Agregar token si existe
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  
-  // LOG solo en desarrollo
-  if (__DEV__) {
-    console.log('📱 Mobile Request:', {
-      id: requestId,
-      url: config.url,
-      method: config.method,
-      hasToken: !!token,
-    });
-  }
-  
-  return config;
-});
-
-// INTERCEPTOR DE RESPONSE - SOLO MOBILE
+// Response interceptor
 instance.interceptors.response.use(
   (response) => {
-    // LOG en desarrollo
-    if (__DEV__) {
-      console.log('✅ Mobile Response:', {
-        url: response.config.url,
-        status: response.status,
-      });
-    }
-    
-    // Guardar token si viene en respuesta
-    if (response.data?.accessToken) {
-      AsyncStorage.setItem('token', response.data.accessToken);
-      console.log('💾 Token guardado en AsyncStorage');
-    }
-    
+    console.log(`✅ ${response.config.method?.toUpperCase()} ${response.config.url} - ${response.status}`);
     return response;
   },
   (error) => {
-    const url = error.config?.url || '';
-    const status = error.response?.status;
-    
-    // NO LOGGEAR errores normales de verifyToken
-    if (url.includes('/verify') && status === 401) {
-      if (__DEV__) {
-        console.log('🔐 verifyToken: No autenticado (normal)');
-      }
-      return Promise.reject(error);
+    if (error.response) {
+      console.error(`❌ API Error ${error.response.status}:`, error.config?.url);
+      console.error('📦 Datos:', error.response.data);
+    } else if (error.request) {
+      console.error('❌ No response from server:', error.request);
+    } else {
+      console.error('❌ Request error:', error.message);
     }
-    
-    // Loggear otros errores
-    if (__DEV__) {
-      console.error('❌ Mobile API Error:', {
-        url,
-        status,
-        data: error.response?.data,
-      });
-    }
-    
-    // Limpiar token si expiró
-    if (status === 401) {
-      AsyncStorage.removeItem('token');
-    }
-    
     return Promise.reject(error);
   }
 );

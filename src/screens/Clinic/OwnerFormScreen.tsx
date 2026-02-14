@@ -7,18 +7,23 @@ import {
   ScrollView, 
   TouchableOpacity,
   TextInput,
-  Alert 
+  Alert,
+  ActivityIndicator
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useClinic } from '../../contexts/ClinicContext';
 
+type OwnerFormParams = {
+  id?: string;
+};
+
 export default function OwnerFormScreen() {
   const navigation = useNavigation();
-  const route = useRoute();
-  const { id } = route.params || {};
+  const route = useRoute<any>();
+  const { id } = (route.params as OwnerFormParams) || {};
   const isEditing = !!id;
   
-  const { createOwner, updateOwner, fetchOwner, loading } = useClinic();
+  const { createOwner, updateOwner, fetchOwner, loading, error } = useClinic();
   
   const [formData, setFormData] = useState({
     firstName: '',
@@ -35,6 +40,13 @@ export default function OwnerFormScreen() {
     notes: ''
   });
 
+  const [formErrors, setFormErrors] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: ''
+  });
+
   useEffect(() => {
     if (isEditing && id) {
       loadOwner();
@@ -42,34 +54,71 @@ export default function OwnerFormScreen() {
   }, [id]);
 
   const loadOwner = async () => {
-    const owner = await fetchOwner(id);
-    if (owner) {
-      setFormData({
-        firstName: owner.firstName || '',
-        lastName: owner.lastName || '',
-        email: owner.email || '',
-        phone: owner.phone || '',
-        address: owner.address || '',
-        dni: owner.dni || '',
-        emergencyContact: owner.emergencyContact || {
-          name: '',
-          phone: '',
-          relationship: ''
-        },
-        notes: owner.notes || ''
-      });
+    try {
+      const owner = await fetchOwner(id as string);
+      if (owner) {
+        setFormData({
+          firstName: owner.firstName || '',
+          lastName: owner.lastName || '',
+          email: owner.email || '',
+          phone: owner.phone || '',
+          address: owner.address || '',
+          dni: owner.dni || '',
+          emergencyContact: owner.emergencyContact || {
+            name: '',
+            phone: '',
+            relationship: ''
+          },
+          notes: owner.notes || ''
+        });
+      }
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo cargar el cliente');
     }
   };
 
-  const handleSubmit = async () => {
-    // Validaciones básicas
-    if (!formData.firstName.trim() || !formData.lastName.trim()) {
-      Alert.alert('Error', 'Nombre y apellido son requeridos');
-      return;
+  const validateForm = () => {
+    const errors = {
+      firstName: '',
+      lastName: '',
+      email: '',
+      phone: ''
+    };
+    
+    let isValid = true;
+    
+    if (!formData.firstName.trim()) {
+      errors.firstName = 'El nombre es requerido';
+      isValid = false;
     }
+    
+    if (!formData.lastName.trim()) {
+      errors.lastName = 'El apellido es requerido';
+      isValid = false;
+    }
+    
+    if (!formData.email.trim()) {
+      errors.email = 'El email es requerido';
+      isValid = false;
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      errors.email = 'Email inválido';
+      isValid = false;
+    }
+    
+    if (!formData.phone.trim()) {
+      errors.phone = 'El teléfono es requerido';
+      isValid = false;
+    }
+    
+    setFormErrors(errors);
+    return isValid;
+  };
 
-    if (!formData.email.trim() || !formData.phone.trim()) {
-      Alert.alert('Error', 'Email y teléfono son requeridos');
+  const handleSubmit = async () => {
+    console.log(' Enviando formulario:', formData);
+    
+    if (!validateForm()) {
+      Alert.alert('Error', 'Por favor completa los campos requeridos');
       return;
     }
 
@@ -81,18 +130,43 @@ export default function OwnerFormScreen() {
         result = await createOwner(formData);
       }
       
+      console.log(' Resultado:', result);
+      
       if (result.success) {
         Alert.alert(
-          'Éxito',
+          ' Éxito',
           result.message || (isEditing ? 'Cliente actualizado' : 'Cliente creado'),
-          [{ text: 'OK', onPress: () => navigation.goBack() }]
+          [{ 
+            text: 'OK', 
+            onPress: () => {
+              // Navegar hacia atrás y luego refrescar
+              navigation.goBack();
+              // Podrías agregar un callback aquí para refrescar la lista
+            }
+          }]
         );
       } else {
-        Alert.alert('Error', result.message || 'Ocurrió un error');
+        Alert.alert(' Error', result.message || 'Ocurrió un error al guardar');
       }
     } catch (error) {
-      Alert.alert('Error', 'No se pudo guardar el cliente');
+      console.error(' Error en handleSubmit:', error);
+      Alert.alert(' Error', 'No se pudo guardar el cliente. Verifica tu conexión.');
     }
+  };
+
+  const formatPhone = (text: string) => {
+    // Auto-formato para teléfono costarricense
+    let formatted = text.replace(/\D/g, '');
+    if (formatted.length > 0 && !formatted.startsWith('+')) {
+      formatted = '+506' + formatted;
+    }
+    if (formatted.length > 4) {
+      formatted = formatted.slice(0, 4) + ' ' + formatted.slice(4);
+    }
+    if (formatted.length > 9) {
+      formatted = formatted.slice(0, 9) + ' ' + formatted.slice(9);
+    }
+    return formatted;
   };
 
   return (
@@ -112,45 +186,78 @@ export default function OwnerFormScreen() {
             <View style={styles.halfInput}>
               <Text style={styles.label}>Nombre *</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, formErrors.firstName ? styles.inputError : null]}
                 placeholder="Juan"
                 value={formData.firstName}
-                onChangeText={(text) => setFormData({ ...formData, firstName: text })}
+                onChangeText={(text) => {
+                  setFormData({ ...formData, firstName: text });
+                  if (formErrors.firstName) {
+                    setFormErrors({ ...formErrors, firstName: '' });
+                  }
+                }}
               />
+              {formErrors.firstName ? (
+                <Text style={styles.errorText}>{formErrors.firstName}</Text>
+              ) : null}
             </View>
             
             <View style={styles.halfInput}>
               <Text style={styles.label}>Apellido *</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, formErrors.lastName ? styles.inputError : null]}
                 placeholder="Pérez"
                 value={formData.lastName}
-                onChangeText={(text) => setFormData({ ...formData, lastName: text })}
+                onChangeText={(text) => {
+                  setFormData({ ...formData, lastName: text });
+                  if (formErrors.lastName) {
+                    setFormErrors({ ...formErrors, lastName: '' });
+                  }
+                }}
               />
+              {formErrors.lastName ? (
+                <Text style={styles.errorText}>{formErrors.lastName}</Text>
+              ) : null}
             </View>
           </View>
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Email *</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, formErrors.email ? styles.inputError : null]}
               placeholder="juan@email.com"
               value={formData.email}
-              onChangeText={(text) => setFormData({ ...formData, email: text })}
+              onChangeText={(text) => {
+                setFormData({ ...formData, email: text.toLowerCase() });
+                if (formErrors.email) {
+                  setFormErrors({ ...formErrors, email: '' });
+                }
+              }}
               keyboardType="email-address"
               autoCapitalize="none"
             />
+            {formErrors.email ? (
+              <Text style={styles.errorText}>{formErrors.email}</Text>
+            ) : null}
           </View>
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Teléfono *</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, formErrors.phone ? styles.inputError : null]}
               placeholder="+506 8888 8888"
               value={formData.phone}
-              onChangeText={(text) => setFormData({ ...formData, phone: text })}
+              onChangeText={(text) => {
+                const formatted = formatPhone(text);
+                setFormData({ ...formData, phone: formatted });
+                if (formErrors.phone) {
+                  setFormErrors({ ...formErrors, phone: '' });
+                }
+              }}
               keyboardType="phone-pad"
             />
+            {formErrors.phone ? (
+              <Text style={styles.errorText}>{formErrors.phone}</Text>
+            ) : null}
           </View>
 
           <View style={styles.inputGroup}>
@@ -174,50 +281,9 @@ export default function OwnerFormScreen() {
           </View>
         </View>
 
-        {/* Contacto de emergencia */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Contacto de Emergencia</Text>
-          
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Nombre</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Nombre del contacto"
-              value={formData.emergencyContact.name}
-              onChangeText={(text) => setFormData({ 
-                ...formData, 
-                emergencyContact: { ...formData.emergencyContact, name: text }
-              })}
-            />
-          </View>
+       
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Teléfono</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Teléfono de emergencia"
-              value={formData.emergencyContact.phone}
-              onChangeText={(text) => setFormData({ 
-                ...formData, 
-                emergencyContact: { ...formData.emergencyContact, phone: text }
-              })}
-              keyboardType="phone-pad"
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Parentesco</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Ej: Esposo/a, Hijo/a"
-              value={formData.emergencyContact.relationship}
-              onChangeText={(text) => setFormData({ 
-                ...formData, 
-                emergencyContact: { ...formData.emergencyContact, relationship: text }
-              })}
-            />
-          </View>
-        </View>
+        
 
         {/* Notas */}
         <View style={styles.section}>
@@ -233,11 +299,19 @@ export default function OwnerFormScreen() {
           />
         </View>
 
+        {/* Mostrar error del contexto si existe */}
+        {error && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorContextText}>{error}</Text>
+          </View>
+        )}
+
         {/* Botones */}
         <View style={styles.buttonGroup}>
           <TouchableOpacity 
             style={styles.cancelButton}
             onPress={() => navigation.goBack()}
+            disabled={loading}
           >
             <Text style={styles.cancelButtonText}>Cancelar</Text>
           </TouchableOpacity>
@@ -247,9 +321,13 @@ export default function OwnerFormScreen() {
             onPress={handleSubmit}
             disabled={loading}
           >
-            <Text style={styles.submitButtonText}>
-              {loading ? 'Guardando...' : (isEditing ? 'Actualizar' : 'Crear Cliente')}
-            </Text>
+            {loading ? (
+              <ActivityIndicator size="small" color="#ffffff" />
+            ) : (
+              <Text style={styles.submitButtonText}>
+                {isEditing ? 'Actualizar' : 'Crear Cliente'}
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -263,7 +341,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
   },
   header: {
-    backgroundColor: '#0f766e',
+    backgroundColor: '#219eb4',
     padding: 20,
     paddingTop: 40,
   },
@@ -271,6 +349,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: 'white',
+    textAlign: 'center',
   },
   form: {
     padding: 16,
@@ -317,13 +396,35 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
   },
+  inputError: {
+    borderColor: '#ef4444',
+    backgroundColor: '#fef2f2',
+  },
+  errorText: {
+    color: '#ef4444',
+    fontSize: 12,
+    marginTop: 4,
+  },
   textArea: {
     minHeight: 100,
+  },
+  errorContainer: {
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  errorContextText: {
+    color: '#dc2626',
+    fontSize: 14,
   },
   buttonGroup: {
     flexDirection: 'row',
     gap: 12,
     marginTop: 20,
+    marginBottom: 40,
   },
   cancelButton: {
     flex: 1,
@@ -341,10 +442,11 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     flex: 2,
-    backgroundColor: '#0f766e',
+    backgroundColor: '#686e6e',
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   submitButtonDisabled: {
     backgroundColor: '#94a3b8',

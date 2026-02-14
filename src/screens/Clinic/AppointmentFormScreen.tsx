@@ -1,4 +1,4 @@
-// src/screens/Clinic/AppointmentFormScreen.tsx
+// mobile-app/src/screens/Clinic/AppointmentFormScreen.tsx - VERSIÓN COMPLETA CORREGIDA
 import React, { useState, useEffect } from 'react';
 import { 
   View, 
@@ -9,17 +9,29 @@ import {
   TextInput,
   Alert,
   Modal,
-  FlatList
+  FlatList,
+  ActivityIndicator,
+  Platform
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useClinic } from '../../contexts/ClinicContext';
 import { useAuth } from '../../hooks/useAuth';
+import axios from '../../api/axios-mobile';
+import { StackNavigationProp } from '@react-navigation/stack';
+
+// Definir tipos para navegación
+type RootStackParamList = {
+  AppointmentForm: { id?: string; petId?: string; ownerId?: string };
+};
+
+type AppointmentFormScreenRouteProp = RouteProp<RootStackParamList, 'AppointmentForm'>;
+type AppointmentFormScreenNavigationProp = StackNavigationProp<RootStackParamList, 'AppointmentForm'>;
 
 export default function AppointmentFormScreen() {
-  const navigation = useNavigation();
-  const route = useRoute();
-  const { user } = useAuth();
+  const navigation = useNavigation<AppointmentFormScreenNavigationProp>();
+  const route = useRoute<AppointmentFormScreenRouteProp>();
+  const { user, logout } = useAuth();
   const { 
     owners, 
     pets, 
@@ -30,69 +42,285 @@ export default function AppointmentFormScreen() {
     loading 
   } = useClinic();
   
-  const { id, petId } = route.params || {};
+  const { id, petId, ownerId } = route.params || {};
   const isEditing = !!id;
   
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     appointmentDate: new Date(),
-    startTime: '09:00',
-    endTime: '10:00',
+    startTime: '',
+    endTime: '',
     type: 'consulta',
     service: '',
     price: '',
     notes: '',
     pet: petId || '',
-    owner: '',
-    veterinarian: user?.id || ''
+    owner: ownerId || '',
+    veterinarian: ''
   });
   
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
-  const [showEndTimePicker, setShowEndTimePicker] = useState(false);
   const [showOwnerModal, setShowOwnerModal] = useState(false);
   const [showPetModal, setShowPetModal] = useState(false);
+  const [showVetModal, setShowVetModal] = useState(false);
+  const [showTimeSlotsModal, setShowTimeSlotsModal] = useState(false);
+  
   const [selectedOwner, setSelectedOwner] = useState<any>(null);
+  const [selectedPet, setSelectedPet] = useState<any>(null);
+  const [selectedVet, setSelectedVet] = useState<any>(null);
   const [ownerPets, setOwnerPets] = useState<any[]>([]);
   
+  const [veterinarians, setVeterinarians] = useState<any[]>([]);
+  const [availableTimeSlots, setAvailableTimeSlots] = useState<any[]>([]);
+  const [loadingVets, setLoadingVets] = useState(false);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+
   useEffect(() => {
     loadData();
     if (id) {
       loadAppointment();
     }
   }, [id]);
-  
+
   const loadData = async () => {
     await Promise.all([
       fetchOwners(),
       fetchPets()
     ]);
+    
+    // Si hay ownerId en los parámetros, cargar el dueño
+    if (ownerId) {
+      const owner = owners.find(o => o._id === ownerId);
+      if (owner) {
+        handleSelectOwner(owner);
+      }
+    }
+    
+    // Si hay petId en los parámetros, cargar la mascota
+    if (petId) {
+      const pet = pets.find(p => p._id === petId);
+      if (pet) {
+        handleSelectPet(pet);
+      }
+    }
   };
-  
+
+  // ✅ FUNCIÓN CORREGIDA: loadAvailableVeterinarians
+  const loadAvailableVeterinarians = async () => {
+    if (!formData.appointmentDate) {
+      Alert.alert('Error', 'Primero selecciona una fecha');
+      return;
+    }
+    
+    setLoadingVets(true);
+    try {
+      const dateStr = formData.appointmentDate.toISOString().split('T')[0];
+      console.log('📅 Buscando veterinarios para fecha:', dateStr);
+      
+      const response = await axios.get(`/api/veterinarians/available`, {
+        params: { date: dateStr }
+      });
+      
+      console.log('👨‍⚕️ Respuesta veterinarios:', response.data);
+      
+      if (response.data.success) {
+        const vets = response.data.veterinarians || [];
+        console.log(`✅ Veterinarios encontrados: ${vets.length}`);
+        
+        setVeterinarians(vets);
+        
+        if (vets.length === 0) {
+          Alert.alert(
+            'Información',
+            'No hay veterinarios registrados en el sistema.',
+            [{ text: 'OK' }]
+          );
+        } else {
+          const availableCount = vets.filter((v: any) => v.available).length;
+          console.log(`✅ Disponibles: ${availableCount}/${vets.length}`);
+          
+          if (availableCount === 0) {
+            Alert.alert(
+              'Sin disponibilidad',
+              'Todos los veterinarios están ocupados para esta fecha. Intenta con otra fecha.',
+              [{ text: 'OK' }]
+            );
+          }
+        }
+        
+        // Si hay veterinarios disponibles, abrir modal automáticamente
+        if (vets.some((v: any) => v.available)) {
+          setShowVetModal(true);
+        }
+      } else {
+        Alert.alert('Error', response.data.message || 'Error al cargar veterinarios');
+      }
+    } catch (error: any) {
+      console.error('❌ Error loading veterinarians:', error);
+      console.error('❌ Error details:', error.response?.data || error.message);
+      
+      // Mensajes específicos
+      if (error.response?.status === 401) {
+        Alert.alert(
+          'Sesión expirada',
+          'Tu sesión ha expirado. Por favor inicia sesión nuevamente.',
+          [{ 
+            text: 'OK', 
+            onPress: () => logout() 
+          }]
+        );
+      } else if (error.response?.status === 404) {
+        Alert.alert(
+          'Endpoint no encontrado',
+          'El servidor no tiene configurado el endpoint de veterinarios.\n\n' +
+          'Verifica que el backend esté corriendo correctamente.',
+          [{ text: 'OK' }]
+        );
+      } else if (error.message?.includes('Network Error')) {
+        Alert.alert(
+          'Error de red',
+          'No se puede conectar al servidor. Verifica tu conexión a internet.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert(
+          'Error',
+          error.response?.data?.message || 'No se pudieron cargar los veterinarios',
+          [{ text: 'OK' }]
+        );
+      }
+    } finally {
+      setLoadingVets(false);
+    }
+  };
+
+  // ✅ FUNCIÓN CORREGIDA: loadVeterinarianTimeSlots
+  const loadVeterinarianTimeSlots = async (vetId: string) => {
+    if (!formData.appointmentDate || !vetId) return;
+    
+    setLoadingSlots(true);
+    try {
+      const dateStr = formData.appointmentDate.toISOString().split('T')[0];
+      console.log('⏰ Buscando horarios para veterinario:', vetId, 'fecha:', dateStr);
+      
+      // ✅ URL CORREGIDA: /api/veterinarians/{id}/availability
+      const response = await axios.get(`/api/veterinarians/${vetId}/availability`, {
+        params: { date: dateStr }
+      });
+      
+      console.log('🕒 Horarios disponibles:', response.data);
+      
+      if (response.data.success) {
+        const slots = response.data.availableSlots || [];
+        setAvailableTimeSlots(slots);
+        
+        if (slots.length === 0) {
+          Alert.alert(
+            'Sin horarios disponibles',
+            'Este veterinario no tiene horarios disponibles para esta fecha.',
+            [{ text: 'OK' }]
+          );
+        } else {
+          setShowTimeSlotsModal(true);
+        }
+      } else {
+        Alert.alert('Error', response.data.message || 'No se pudieron cargar los horarios');
+      }
+    } catch (error: any) {
+      console.error('❌ Error loading time slots:', error);
+      Alert.alert(
+        'Error',
+        error.response?.data?.message || 'No se pudieron cargar los horarios disponibles'
+      );
+    } finally {
+      setLoadingSlots(false);
+    }
+  };
+
   const loadAppointment = async () => {
-    // Cargar datos de la cita si se está editando
-    // Implementar según tu API
+    if (!id) return;
+    
+    try {
+      // Aquí deberías implementar la carga de una cita existente
+      Alert.alert('Info', 'Carga de cita existente - Funcionalidad por implementar');
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo cargar la cita');
+    }
   };
-  
+
   const handleSelectOwner = (owner: any) => {
     setSelectedOwner(owner);
     setFormData(prev => ({ ...prev, owner: owner._id }));
-    // Filtrar mascotas de este dueño
-    const ownerPets = pets.filter(pet => pet.owner._id === owner._id);
+    const ownerPets = pets.filter(pet => pet.owner?._id === owner._id);
     setOwnerPets(ownerPets);
     setShowOwnerModal(false);
   };
-  
+
   const handleSelectPet = (pet: any) => {
+    setSelectedPet(pet);
     setFormData(prev => ({ 
       ...prev, 
       pet: pet._id,
-      owner: pet.owner._id 
+      owner: pet.owner?._id || prev.owner
     }));
+    
+    // Si no hay dueño seleccionado, buscarlo
+    if (!selectedOwner && pet.owner) {
+      const owner = owners.find(o => o._id === pet.owner._id);
+      if (owner) {
+        setSelectedOwner(owner);
+      }
+    }
+    
     setShowPetModal(false);
   };
-  
+
+  const handleSelectVeterinarian = (vet: any) => {
+    setSelectedVet(vet);
+    setFormData(prev => ({ ...prev, veterinarian: vet._id }));
+    
+    // Cargar horarios disponibles para este veterinario
+    loadVeterinarianTimeSlots(vet._id);
+    
+    setShowVetModal(false);
+  };
+
+  const handleSelectTimeSlot = (slot: any) => {
+    setFormData(prev => ({
+      ...prev,
+      startTime: slot.start,
+      endTime: slot.end
+    }));
+    setShowTimeSlotsModal(false);
+    
+    Alert.alert(
+      'Horario seleccionado',
+      `✅ ${slot.start} - ${slot.end}`,
+      [{ text: 'OK' }]
+    );
+  };
+
+  const handleDateChange = (event: any, date?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowDatePicker(false);
+    }
+    
+    if (date) {
+      setFormData({ 
+        ...formData, 
+        appointmentDate: date,
+        veterinarian: '',
+        startTime: '',
+        endTime: ''
+      });
+      setSelectedVet(null);
+      
+      // Cargar veterinarios disponibles para la nueva fecha
+      loadAvailableVeterinarians();
+    }
+  };
+
   const handleSubmit = async () => {
     // Validaciones
     if (!formData.title.trim()) {
@@ -105,20 +333,25 @@ export default function AppointmentFormScreen() {
       return;
     }
     
-    if (!formData.startTime || !formData.endTime) {
-      Alert.alert('Error', 'La hora de inicio y fin son requeridas');
+    if (!formData.veterinarian) {
+      Alert.alert('Error', 'Selecciona un veterinario');
       return;
     }
     
+    if (!formData.startTime || !formData.endTime) {
+      Alert.alert('Error', 'Selecciona un horario');
+      return;
+    }
+
     const appointmentData = {
       ...formData,
       appointmentDate: formData.appointmentDate.toISOString(),
       price: parseFloat(formData.price) || 0
     };
-    
+
     try {
       let result;
-      if (isEditing) {
+      if (isEditing && id) {
         result = await updateAppointment(id, appointmentData);
       } else {
         result = await createAppointment(appointmentData);
@@ -126,23 +359,28 @@ export default function AppointmentFormScreen() {
       
       if (result.success) {
         Alert.alert(
-          'Éxito',
-          isEditing ? 'Cita actualizada' : 'Cita creada',
+          '✅ Éxito',
+          isEditing ? 'Cita actualizada correctamente' : 'Cita creada correctamente',
           [{ text: 'OK', onPress: () => navigation.goBack() }]
         );
       } else {
-        Alert.alert('Error', result.message);
+        Alert.alert('❌ Error', result.message || 'No se pudo guardar la cita');
       }
-    } catch (error) {
-      Alert.alert('Error', 'Ocurrió un error al guardar');
+    } catch (error: any) {
+      console.error('Error:', error);
+      Alert.alert('❌ Error', error.message || 'Ocurrió un error al guardar la cita');
     }
   };
-  
-  const formatTime = (time: string) => {
-    const [hours, minutes] = time.split(':');
-    return `${hours}:${minutes}`;
+
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString('es-ES', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
   };
-  
+
   const appointmentTypes = [
     { value: 'consulta', label: 'Consulta General' },
     { value: 'vacunacion', label: 'Vacunación' },
@@ -152,7 +390,7 @@ export default function AppointmentFormScreen() {
     { value: 'seguimiento', label: 'Seguimiento' },
     { value: 'otros', label: 'Otros' }
   ];
-  
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
@@ -160,7 +398,7 @@ export default function AppointmentFormScreen() {
           {isEditing ? 'Editar Cita' : 'Nueva Cita'}
         </Text>
       </View>
-      
+
       <View style={styles.form}>
         {/* Título */}
         <View style={styles.inputGroup}>
@@ -172,40 +410,7 @@ export default function AppointmentFormScreen() {
             onChangeText={(text) => setFormData({ ...formData, title: text })}
           />
         </View>
-        
-        {/* Dueño */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Dueño *</Text>
-          <TouchableOpacity 
-            style={styles.selector}
-            onPress={() => setShowOwnerModal(true)}
-          >
-            <Text style={formData.owner ? styles.selectorTextSelected : styles.selectorText}>
-              {selectedOwner 
-                ? `${selectedOwner.firstName} ${selectedOwner.lastName}`
-                : 'Seleccionar dueño'}
-            </Text>
-            <Text style={styles.selectorArrow}>▼</Text>
-          </TouchableOpacity>
-        </View>
-        
-        {/* Mascota */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Paciente *</Text>
-          <TouchableOpacity 
-            style={styles.selector}
-            onPress={() => setShowPetModal(true)}
-            disabled={!formData.owner}
-          >
-            <Text style={formData.pet ? styles.selectorTextSelected : styles.selectorText}>
-              {formData.pet 
-                ? pets.find(p => p._id === formData.pet)?.name
-                : 'Seleccionar mascota'}
-            </Text>
-            <Text style={styles.selectorArrow}>▼</Text>
-          </TouchableOpacity>
-        </View>
-        
+
         {/* Fecha */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Fecha *</Text>
@@ -214,45 +419,110 @@ export default function AppointmentFormScreen() {
             onPress={() => setShowDatePicker(true)}
           >
             <Text style={styles.selectorTextSelected}>
-              {formData.appointmentDate.toLocaleDateString('es-ES', {
-                weekday: 'long',
-                day: 'numeric',
-                month: 'long',
-                year: 'numeric'
-              })}
+              {formatDate(formData.appointmentDate)}
             </Text>
             <Text style={styles.selectorArrow}>▼</Text>
           </TouchableOpacity>
         </View>
-        
-        {/* Hora inicio */}
+
+        {/* Veterinario */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Hora de inicio *</Text>
+          <Text style={styles.label}>Veterinario *</Text>
           <TouchableOpacity 
             style={styles.selector}
-            onPress={() => setShowStartTimePicker(true)}
+            onPress={() => {
+              loadAvailableVeterinarians();
+            }}
+            disabled={loadingVets}
           >
-            <Text style={styles.selectorTextSelected}>
-              {formatTime(formData.startTime)}
+            {loadingVets ? (
+              <ActivityIndicator size="small" color="#0891b2" />
+            ) : (
+              <>
+                <Text style={formData.veterinarian ? styles.selectorTextSelected : styles.selectorText}>
+                  {selectedVet 
+                    ? `${selectedVet.username} (${selectedVet.specialty || 'Veterinario'})`
+                    : 'Seleccionar veterinario'}
+                </Text>
+                <Text style={styles.selectorArrow}>▼</Text>
+              </>
+            )}
+          </TouchableOpacity>
+          <Text style={styles.helperText}>
+            Se mostrarán solo veterinarios disponibles en la fecha seleccionada
+          </Text>
+        </View>
+
+        {/* Horario */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Horario *</Text>
+          <TouchableOpacity 
+            style={[styles.selector, !formData.veterinarian && styles.selectorDisabled]}
+            onPress={() => {
+              if (formData.veterinarian && selectedVet) {
+                loadVeterinarianTimeSlots(selectedVet._id);
+              }
+            }}
+            disabled={!formData.veterinarian}
+          >
+            <Text style={formData.startTime ? styles.selectorTextSelected : styles.selectorText}>
+              {formData.startTime 
+                ? `${formData.startTime} - ${formData.endTime}`
+                : 'Seleccionar horario'}
             </Text>
             <Text style={styles.selectorArrow}>▼</Text>
           </TouchableOpacity>
+          <Text style={styles.helperText}>
+            {!formData.veterinarian 
+              ? 'Primero selecciona un veterinario'
+              : 'Selecciona un horario disponible'}
+          </Text>
         </View>
-        
-        {/* Hora fin */}
+
+        {/* Dueño */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Hora de fin *</Text>
+          <Text style={styles.label}>Dueño *</Text>
           <TouchableOpacity 
             style={styles.selector}
-            onPress={() => setShowEndTimePicker(true)}
+            onPress={() => setShowOwnerModal(true)}
+            disabled={!!ownerId}
           >
-            <Text style={styles.selectorTextSelected}>
-              {formatTime(formData.endTime)}
+            <Text style={formData.owner ? styles.selectorTextSelected : styles.selectorText}>
+              {selectedOwner 
+                ? `${selectedOwner.firstName} ${selectedOwner.lastName}`
+                : ownerId ? 'Cargando...' : 'Seleccionar dueño'}
+            </Text>
+            {!ownerId && <Text style={styles.selectorArrow}>▼</Text>}
+          </TouchableOpacity>
+          {ownerId && (
+            <Text style={styles.helperText}>
+              El dueño fue seleccionado automáticamente desde la pantalla anterior
+            </Text>
+          )}
+        </View>
+
+        {/* Mascota */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Paciente *</Text>
+          <TouchableOpacity 
+            style={[styles.selector, !formData.owner && styles.selectorDisabled]}
+            onPress={() => setShowPetModal(true)}
+            disabled={!formData.owner}
+          >
+            <Text style={formData.pet ? styles.selectorTextSelected : styles.selectorText}>
+              {selectedPet 
+                ? `${selectedPet.name} (${selectedPet.species})`
+                : petId ? 'Cargando...' : 'Seleccionar mascota'}
             </Text>
             <Text style={styles.selectorArrow}>▼</Text>
           </TouchableOpacity>
+          <Text style={styles.helperText}>
+            {!formData.owner 
+              ? 'Primero selecciona un dueño'
+              : ownerPets.length === 0 ? 'Este dueño no tiene mascotas' : ''}
+          </Text>
         </View>
-        
+
         {/* Tipo de cita */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Tipo de cita</Text>
@@ -276,7 +546,7 @@ export default function AppointmentFormScreen() {
             ))}
           </View>
         </View>
-        
+
         {/* Descripción */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Descripción</Text>
@@ -290,7 +560,7 @@ export default function AppointmentFormScreen() {
             textAlignVertical="top"
           />
         </View>
-        
+
         {/* Precio */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Precio ($)</Text>
@@ -302,7 +572,7 @@ export default function AppointmentFormScreen() {
             keyboardType="decimal-pad"
           />
         </View>
-        
+
         {/* Notas */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Notas adicionales</Text>
@@ -316,7 +586,7 @@ export default function AppointmentFormScreen() {
             textAlignVertical="top"
           />
         </View>
-        
+
         {/* Botones */}
         <View style={styles.buttonGroup}>
           <TouchableOpacity 
@@ -327,69 +597,190 @@ export default function AppointmentFormScreen() {
           </TouchableOpacity>
           
           <TouchableOpacity 
-            style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+            style={[styles.submitButton, (loading || loadingVets) && styles.submitButtonDisabled]}
             onPress={handleSubmit}
-            disabled={loading}
+            disabled={loading || loadingVets}
           >
-            <Text style={styles.submitButtonText}>
-              {loading ? 'Guardando...' : isEditing ? 'Actualizar' : 'Crear Cita'}
-            </Text>
+            {loading || loadingVets ? (
+              <ActivityIndicator size="small" color="#ffffff" />
+            ) : (
+              <Text style={styles.submitButtonText}>
+                {isEditing ? 'Actualizar' : 'Crear Cita'}
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
       </View>
-      
-      {/* Date Pickers */}
+
+      {/* Date Picker */}
       {showDatePicker && (
         <DateTimePicker
           value={formData.appointmentDate}
           mode="date"
-          display="default"
-          onChange={(event, date) => {
-            setShowDatePicker(false);
-            if (date) {
-              setFormData({ ...formData, appointmentDate: date });
-            }
-          }}
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={handleDateChange}
         />
       )}
-      
-      {showStartTimePicker && (
-        <DateTimePicker
-          value={new Date(`2000-01-01T${formData.startTime}:00`)}
-          mode="time"
-          display="spinner"
-          onChange={(event, date) => {
-            setShowStartTimePicker(false);
-            if (date) {
-              const hours = date.getHours().toString().padStart(2, '0');
-              const minutes = date.getMinutes().toString().padStart(2, '0');
-              setFormData({ ...formData, startTime: `${hours}:${minutes}` });
-            }
-          }}
-        />
-      )}
-      
-      {showEndTimePicker && (
-        <DateTimePicker
-          value={new Date(`2000-01-01T${formData.endTime}:00`)}
-          mode="time"
-          display="spinner"
-          onChange={(event, date) => {
-            setShowEndTimePicker(false);
-            if (date) {
-              const hours = date.getHours().toString().padStart(2, '0');
-              const minutes = date.getMinutes().toString().padStart(2, '0');
-              setFormData({ ...formData, endTime: `${hours}:${minutes}` });
-            }
-          }}
-        />
-      )}
-      
+
+      {/* Modal de Veterinarios */}
+      <Modal
+        visible={showVetModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowVetModal(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Seleccionar Veterinario</Text>
+              <TouchableOpacity onPress={() => setShowVetModal(false)}>
+                <Text style={styles.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            
+            {loadingVets ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#0891b2" />
+                <Text style={styles.loadingText}>Buscando veterinarios disponibles...</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={veterinarians}
+                keyExtractor={(item) => item._id || item.id || Math.random().toString()}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[styles.modalItem, !item.available && styles.modalItemDisabled]}
+                    onPress={() => item.available && handleSelectVeterinarian(item)}
+                    disabled={!item.available}
+                  >
+                    <View style={styles.vetInfo}>
+                      <Text style={styles.modalItemText}>
+                        {item.username} 
+                        {item.specialty && ` - ${item.specialty}`}
+                      </Text>
+                      <Text style={styles.modalItemSubtext}>
+                        {item.email}
+                      </Text>
+                      <View style={styles.availabilityIndicator}>
+                        <View style={[
+                          styles.availabilityDot,
+                          item.available ? styles.availableDot : styles.unavailableDot
+                        ]} />
+                        <Text style={styles.availabilityText}>
+                          {item.available ? '🟢 Disponible' : '🔴 No disponible'}
+                        </Text>
+                      </View>
+                      {item.availableSlots && item.availableSlots.length > 0 && (
+                        <Text style={styles.slotsInfo}>
+                          {item.availableSlots.length} horarios disponibles
+                        </Text>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyModalText}>
+                      No hay veterinarios disponibles para esta fecha
+                    </Text>
+                    <TouchableOpacity 
+                      style={styles.emptyButton}
+                      onPress={() => setShowVetModal(false)}
+                    >
+                      <Text style={styles.emptyButtonText}>Cerrar</Text>
+                    </TouchableOpacity>
+                  </View>
+                }
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal de Horarios Disponibles */}
+      <Modal
+        visible={showTimeSlotsModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowTimeSlotsModal(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                Horarios de {selectedVet?.username}
+              </Text>
+              <TouchableOpacity onPress={() => setShowTimeSlotsModal(false)}>
+                <Text style={styles.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            
+            {loadingSlots ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#0891b2" />
+                <Text style={styles.loadingText}>Cargando horarios...</Text>
+              </View>
+            ) : availableTimeSlots.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyModalText}>
+                  No hay horarios disponibles para este veterinario
+                </Text>
+                <TouchableOpacity 
+                  style={styles.emptyButton}
+                  onPress={() => setShowTimeSlotsModal(false)}
+                >
+                  <Text style={styles.emptyButtonText}>Cerrar</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <FlatList
+                data={availableTimeSlots}
+                keyExtractor={(item, index) => `${item.start}-${item.end}-${index}`}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[
+                      styles.timeSlotItem,
+                      !item.available && styles.timeSlotItemDisabled
+                    ]}
+                    onPress={() => item.available && handleSelectTimeSlot(item)}
+                    disabled={!item.available}
+                  >
+                    <Text style={[
+                      styles.timeSlotText,
+                      !item.available && styles.timeSlotTextDisabled
+                    ]}>
+                      {item.start} - {item.end}
+                    </Text>
+                    <Text style={[
+                      styles.timeSlotStatus,
+                      item.available ? styles.timeSlotAvailable : styles.timeSlotUnavailable
+                    ]}>
+                      {item.available ? '🟢 Disponible' : '🔴 Ocupado'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                numColumns={2}
+                columnWrapperStyle={styles.timeSlotGrid}
+                ListFooterComponent={
+                  <TouchableOpacity 
+                    style={styles.closeButton}
+                    onPress={() => setShowTimeSlotsModal(false)}
+                  >
+                    <Text style={styles.closeButtonText}>Cancelar</Text>
+                  </TouchableOpacity>
+                }
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
+
       {/* Modal de Dueños */}
       <Modal
         visible={showOwnerModal}
         animationType="slide"
         transparent={true}
+        onRequestClose={() => setShowOwnerModal(false)}
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
@@ -401,7 +792,7 @@ export default function AppointmentFormScreen() {
             </View>
             <FlatList
               data={owners}
-              keyExtractor={(item) => item._id}
+              keyExtractor={(item) => item._id || item.id || Math.random().toString()}
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={styles.modalItem}
@@ -411,7 +802,7 @@ export default function AppointmentFormScreen() {
                     {item.firstName} {item.lastName}
                   </Text>
                   <Text style={styles.modalItemSubtext}>
-                    {item.phone} • {item.petCount || 0} mascotas
+                    {item.phone || 'Sin teléfono'} • {item.pets?.length || 0} mascotas
                   </Text>
                 </TouchableOpacity>
               )}
@@ -424,12 +815,13 @@ export default function AppointmentFormScreen() {
           </View>
         </View>
       </Modal>
-      
+
       {/* Modal de Mascotas */}
       <Modal
         visible={showPetModal}
         animationType="slide"
         transparent={true}
+        onRequestClose={() => setShowPetModal(false)}
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
@@ -440,8 +832,8 @@ export default function AppointmentFormScreen() {
               </TouchableOpacity>
             </View>
             <FlatList
-              data={formData.owner ? ownerPets : pets}
-              keyExtractor={(item) => item._id}
+              data={ownerPets}
+              keyExtractor={(item) => item._id || item.id || Math.random().toString()}
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={styles.modalItem}
@@ -451,15 +843,13 @@ export default function AppointmentFormScreen() {
                     {item.name} ({item.species})
                   </Text>
                   <Text style={styles.modalItemSubtext}>
-                    {item.breed} • {item.gender}
+                    {item.breed || 'Sin raza'} • {item.color || 'Sin color'}
                   </Text>
                 </TouchableOpacity>
               )}
               ListEmptyComponent={
                 <Text style={styles.emptyModalText}>
-                  {formData.owner 
-                    ? 'Este dueño no tiene mascotas registradas'
-                    : 'Selecciona un dueño primero'}
+                  Este dueño no tiene mascotas registradas
                 </Text>
               }
             />
@@ -497,6 +887,12 @@ const styles = StyleSheet.create({
     color: '#374151',
     marginBottom: 8,
   },
+  helperText: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
   input: {
     backgroundColor: 'white',
     borderWidth: 1,
@@ -517,6 +913,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  selectorDisabled: {
+    backgroundColor: '#f3f4f6',
+    borderColor: '#e5e7eb',
   },
   selectorText: {
     fontSize: 16,
@@ -560,6 +960,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     marginTop: 20,
+    marginBottom: 40,
   },
   cancelButton: {
     flex: 1,
@@ -581,6 +982,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   submitButtonDisabled: {
     backgroundColor: '#94a3b8',
@@ -599,7 +1001,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '70%',
+    maxHeight: '80%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -618,10 +1020,25 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: '#6b7280',
   },
+  loadingContainer: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    color: '#64748b',
+  },
   modalItem: {
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
+  },
+  modalItemDisabled: {
+    backgroundColor: '#f8fafc',
+    opacity: 0.6,
+  },
+  vetInfo: {
+    flex: 1,
   },
   modalItemText: {
     fontSize: 16,
@@ -632,10 +1049,101 @@ const styles = StyleSheet.create({
   modalItemSubtext: {
     fontSize: 14,
     color: '#64748b',
+    marginBottom: 8,
+  },
+  availabilityIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  availabilityDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  availableDot: {
+    backgroundColor: '#10b981',
+  },
+  unavailableDot: {
+    backgroundColor: '#ef4444',
+  },
+  availabilityText: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  slotsInfo: {
+    fontSize: 11,
+    color: '#0891b2',
+    fontStyle: 'italic',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    padding: 40,
   },
   emptyModalText: {
     textAlign: 'center',
-    padding: 40,
     color: '#94a3b8',
+    marginBottom: 16,
+  },
+  emptyButton: {
+    backgroundColor: '#0891b2',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  emptyButtonText: {
+    color: 'white',
+    fontSize: 14,
+  },
+  timeSlotItem: {
+    backgroundColor: '#f0f9ff',
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+    flex: 1,
+    margin: 4,
+  },
+  timeSlotItemDisabled: {
+    backgroundColor: '#f1f5f9',
+    borderColor: '#e5e7eb',
+    opacity: 0.6,
+  },
+  timeSlotText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0c4a6e',
+    marginBottom: 4,
+  },
+  timeSlotTextDisabled: {
+    color: '#94a3b8',
+  },
+  timeSlotStatus: {
+    fontSize: 12,
+  },
+  timeSlotAvailable: {
+    color: '#059669',
+  },
+  timeSlotUnavailable: {
+    color: '#dc2626',
+  },
+  timeSlotGrid: {
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  closeButton: {
+    backgroundColor: '#f1f5f9',
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginVertical: 8,
+  },
+  closeButtonText: {
+    color: '#64748b',
+    fontWeight: '500',
   },
 });

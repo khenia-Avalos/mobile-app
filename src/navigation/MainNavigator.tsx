@@ -1,6 +1,7 @@
 // src/navigation/MainNavigator.tsx
 import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
+import { View, ActivityIndicator } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
 
 // PANTALLAS PÚBLICAS
@@ -10,66 +11,106 @@ import RegisterScreen from '../screens/Auth/RegisterScreen';
 import ForgotPasswordScreen from '../screens/Auth/ForgotPasswordScreen';
 import ResetPasswordScreen from '../screens/Auth/ResetPasswordScreen';
 
-// PANTALLAS AUTENTICADAS (CLÍNICA)
+// PANTALLAS AUTENTICADAS (CLÍNICA - ADMIN)
 import DashboardScreen from '../screens/Clinic/DashboardScreen';
 import OwnersScreen from '../screens/Clinic/OwnersScreen';
 import OwnerFormScreen from '../screens/Clinic/OwnerFormScreen';
+import OwnerDetailScreen from '../screens/Clinic/OwnerDetailScreen';
+import PetFormScreen from '../screens/Clinic/PetFormScreen';
 import AppointmentFormScreen from '../screens/Clinic/AppointmentFormScreen';
+import AppointmentsScreen from '../screens/Clinic/AppointmentsScreen';
+
+// PANTALLAS AUTENTICADAS (DOCTOR)
+import DoctorDashboardScreen from '../screens/Clinic/DoctorDashboardScreen';
+
+// PANTALLAS AUTENTICADAS (RECEPCIÓN)
+import ReceptionDashboardScreen from '../screens/Clinic/ReceptionDashboardScreen';
 
 // PANTALLAS AUTENTICADAS (TAREAS EXISTENTES)
 import TasksScreen from '../screens/Tasks/TasksScreen';
 import TaskFormScreen from '../screens/Tasks/TaskFormScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 
-// TEMPORAL: Pantallas que aún no existen (comentadas)
-// import PetFormScreen from '../screens/Clinic/PetFormScreen';
-// import AppointmentsScreen from '../screens/Clinic/AppointmentsScreen';
-// import CalendarScreen from '../screens/Clinic/CalendarScreen';
-
 const Stack = createStackNavigator();
 
-export default function MainNavigator() {
-  const { isAuthenticated, authChecked } = useAuth();
+// Pantalla de carga
+const LoadingScreen = () => (
+  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' }}>
+    <ActivityIndicator size="large" color="#0891b2" />
+  </View>
+);
 
+export default function MainNavigator() {
+  const { user, isAuthenticated, authChecked } = useAuth();
+
+  // Mientras verifica autenticación, mostrar loading
   if (!authChecked) {
-    return null;
+    return (
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="Loading" component={LoadingScreen} />
+      </Stack.Navigator>
+    );
   }
 
-  return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {isAuthenticated ? (
-        // USUARIO AUTENTICADO
-        <>
-          {/* PANEL DE CONTROL */}
+  // USUARIO NO AUTENTICADO
+  if (!isAuthenticated || !user) {
+    return (
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="Home" component={HomeScreen} />
+        <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="Register" component={RegisterScreen} />
+        <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+        <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+      </Stack.Navigator>
+    );
+  }
+
+  // USUARIO AUTENTICADO - REDIRECCIÓN POR ROL
+  switch (user.role) {
+    case 'admin':
+      return (
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
           <Stack.Screen name="Dashboard" component={DashboardScreen} />
-          
-          {/* CLIENTES */}
+          <Stack.Screen name="Register" component={RegisterScreen} />
           <Stack.Screen name="Owners" component={OwnersScreen} />
           <Stack.Screen name="OwnerForm" component={OwnerFormScreen} />
-          
-          {/* CITAS */}
+          <Stack.Screen name="OwnerDetail" component={OwnerDetailScreen} />
+          <Stack.Screen name="PetForm" component={PetFormScreen} />
+          <Stack.Screen name="Appointments" component={AppointmentsScreen} />
           <Stack.Screen name="AppointmentForm" component={AppointmentFormScreen} />
-          
-          {/* TEMPORAL: Comentar estas líneas hasta crear las pantallas */}
-          {/* <Stack.Screen name="Appointments" component={AppointmentsScreen} /> */}
-          {/* <Stack.Screen name="Calendar" component={CalendarScreen} /> */}
-          {/* <Stack.Screen name="PetForm" component={PetFormScreen} /> */}
-          
-          {/* TAREAS EXISTENTES */}
           <Stack.Screen name="Tasks" component={TasksScreen} />
           <Stack.Screen name="TaskForm" component={TaskFormScreen} />
           <Stack.Screen name="Profile" component={ProfileScreen} />
-        </>
-      ) : (
-        // USUARIO NO AUTENTICADO
-        <>
+        </Stack.Navigator>
+      );
+
+    case 'veterinarian':
+      return (
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="DoctorDashboard" component={DoctorDashboardScreen} />
+          <Stack.Screen name="Profile" component={ProfileScreen} />
+        </Stack.Navigator>
+      );
+
+    case 'assistant':
+      return (
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="ReceptionDashboard" component={ReceptionDashboardScreen} />
+          <Stack.Screen name="Owners" component={OwnersScreen} />
+          <Stack.Screen name="OwnerForm" component={OwnerFormScreen} />
+          <Stack.Screen name="PetForm" component={PetFormScreen} />
+          <Stack.Screen name="Appointments" component={AppointmentsScreen} />
+          <Stack.Screen name="AppointmentForm" component={AppointmentFormScreen} />
+          <Stack.Screen name="Profile" component={ProfileScreen} />
+        </Stack.Navigator>
+      );
+
+    default:
+      return (
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
           <Stack.Screen name="Home" component={HomeScreen} />
-          <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="Register" component={RegisterScreen} />
-          <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-          <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
-        </>
-      )}
-    </Stack.Navigator>
-  );
+          <Stack.Screen name="Profile" component={ProfileScreen} />
+        </Stack.Navigator>
+      );
+  }
 }
