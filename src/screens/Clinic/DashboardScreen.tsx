@@ -35,10 +35,12 @@ export default function DashboardScreen() {
   
   const loadData = async () => {
     const today = new Date().toISOString().split('T')[0];
+    console.log('📅 Cargando citas para hoy:', today);
+    
     await Promise.all([
       fetchOwners(),
       fetchPets(),
-      fetchAppointments({ date: today })
+      fetchAppointments({ date: today }) // ✅ SOLO CITAS DE HOY
     ]);
   };
   
@@ -48,11 +50,21 @@ export default function DashboardScreen() {
     setRefreshing(false);
   };
   
-  // Filtrar citas de hoy programadas/confirmadas
+  // ✅ CORREGIDO: Filtrar por FECHA y STATUS
   useEffect(() => {
-    const todayApts = appointments.filter(apt => 
-      apt.status === 'scheduled' || apt.status === 'confirmed'
-    );
+    const today = new Date().toISOString().split('T')[0];
+    
+    const todayApts = appointments.filter(apt => {
+      // Obtener la fecha de la cita en formato YYYY-MM-DD
+      const aptDate = apt.appointmentDate ? new Date(apt.appointmentDate).toISOString().split('T')[0] : null;
+      
+      // Verificar que sea de hoy Y que tenga status válido
+      return aptDate === today && 
+             (apt.status === 'scheduled' || apt.status === 'confirmed');
+    });
+    
+    console.log(`📊 Citas filtradas para hoy: ${todayApts.length} de ${appointments.length} totales`);
+    
     setTodayAppointments(todayApts);
   }, [appointments]);
   
@@ -74,9 +86,7 @@ export default function DashboardScreen() {
   };
   
   const handleRegisterNavigation = () => {
-    // Verificar si el usuario es administrador
     if (user?.role === 'admin') {
-      // Navegar a la pantalla de registro
       navigation.navigate('Register' as never);
     } else {
       Alert.alert(
@@ -95,19 +105,23 @@ export default function DashboardScreen() {
       }
     >
       <View style={styles.header}>
-  <View>
-    <TouchableOpacity onPress={() => navigation.navigate('Profile' as never)}>
-      <Text style={styles.welcome}>
-        Hola, Dr. {user?.username} 
-      </Text>
-    </TouchableOpacity>
-    <Text style={styles.subtitle}>
-      Clínica Veterinaria - Administración
-    </Text>
-  </View>
+        <View>
+          <TouchableOpacity onPress={() => navigation.navigate('Profile' as never)}>
+            <Text style={styles.welcome}>
+              Hola, Dr. {user?.username} 
+            </Text>
+          </TouchableOpacity>
+          <Text style={styles.subtitle}>
+            {new Date().toLocaleDateString('es-ES', { 
+              weekday: 'long', 
+              day: 'numeric', 
+              month: 'long',
+              year: 'numeric'
+            })}
+          </Text>
+        </View>
         
         <View style={styles.headerButtons}>
-          
           <TouchableOpacity 
             style={styles.logoutButton}
             onPress={handleLogout}
@@ -158,7 +172,6 @@ export default function DashboardScreen() {
       <View style={styles.quickActions}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Acciones Rápidas</Text>
-        
         </View>
         
         <View style={styles.actionsGrid}>
@@ -211,13 +224,7 @@ export default function DashboardScreen() {
       <View style={styles.todaySection}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Citas para hoy</Text>
-          <TouchableOpacity onPress={() => {
-            Alert.alert(
-              'Próximamente',
-              'Lista completa de citas en desarrollo.',
-              [{ text: 'OK' }]
-            );
-          }}>
+          <TouchableOpacity onPress={() => navigation.navigate('Appointments' as never)}>
             <Text style={styles.seeAll}>Ver todas</Text>
           </TouchableOpacity>
         </View>
@@ -233,19 +240,20 @@ export default function DashboardScreen() {
             </TouchableOpacity>
           </View>
         ) : (
-          todayAppointments.slice(0, 3).map((apt, index) => (
+          todayAppointments.map((apt) => (
             <TouchableOpacity 
-              key={apt._id || index}
+              key={apt._id}
               style={styles.appointmentCard}
               onPress={() => {
                 Alert.alert(
                   'Detalle de Cita',
                   `${apt.title}\n\n` +
-                  ` ${new Date(apt.appointmentDate).toLocaleDateString('es-ES')}\n` +
-                  ` ${apt.startTime} - ${apt.endTime}\n` +
-                  ` ${apt.pet?.name || 'Sin mascota'}\n` +
-                  ` ${apt.owner?.firstName || ''} ${apt.owner?.lastName || ''}\n` +
-                  ` ${apt.description || 'Sin descripción'}`,
+                  `📅 ${new Date(apt.appointmentDate).toLocaleDateString('es-ES')}\n` +
+                  `⏰ ${apt.startTime} - ${apt.endTime}\n` +
+                  `🐕 ${apt.pet?.name || 'Sin mascota'} (${apt.pet?.species || ''})\n` +
+                  `👤 ${apt.owner?.firstName || ''} ${apt.owner?.lastName || ''}\n` +
+                  `👨‍⚕️ ${apt.veterinarian?.username || ''}\n` +
+                  `📝 ${apt.description || 'Sin descripción'}`,
                   [{ text: 'OK' }]
                 );
               }}
@@ -257,12 +265,17 @@ export default function DashboardScreen() {
                 <Text style={styles.aptTitle}>{apt.title}</Text>
                 {apt.pet && (
                   <Text style={styles.aptPet}>
-                     {apt.pet.name} ({apt.pet.species})
+                    🐕 {apt.pet.name} ({apt.pet.species})
                   </Text>
                 )}
                 {apt.owner && (
                   <Text style={styles.aptOwner}>
-                     {apt.owner.firstName} {apt.owner.lastName}
+                    👤 {apt.owner.firstName} {apt.owner.lastName}
+                  </Text>
+                )}
+                {apt.veterinarian && (
+                  <Text style={styles.aptVet}>
+                    👨‍⚕️ {apt.veterinarian.username}
                   </Text>
                 )}
               </View>
@@ -278,7 +291,6 @@ export default function DashboardScreen() {
           ))
         )}
       </View>
-     
     </ScrollView>
   );
 }
@@ -331,24 +343,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#bbf7d0',
     marginTop: 4,
+    textTransform: 'capitalize',
   },
   headerButtons: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  buttonSecondary: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  buttonTextSecondary: {
-    color: 'white',
-    fontWeight: '600',
-    fontSize: 12,
   },
   logoutButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
@@ -413,17 +413,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#0f172a',
   },
-  registerButton: {
-    backgroundColor: '#8b5cf6',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  registerButtonText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '600',
-  },
   actionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -453,7 +442,7 @@ const styles = StyleSheet.create({
     padding: 16,
     backgroundColor: 'white',
     marginHorizontal: 16,
-    marginBottom: 16,
+    marginBottom: 24,
     borderRadius: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -473,11 +462,12 @@ const styles = StyleSheet.create({
   emptyText: {
     color: '#94a3b8',
     marginBottom: 12,
+    fontSize: 16,
   },
   emptyButton: {
     backgroundColor: '#0891b2',
     paddingHorizontal: 20,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderRadius: 8,
   },
   emptyButtonText: {
@@ -490,9 +480,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
     borderLeftWidth: 4,
     borderLeftColor: '#0891b2',
   },
@@ -519,50 +506,23 @@ const styles = StyleSheet.create({
   aptOwner: {
     fontSize: 13,
     color: '#94a3b8',
+    marginBottom: 2,
+  },
+  aptVet: {
+    fontSize: 12,
+    color: '#0891b2',
+    marginTop: 4,
   },
   statusBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
-    marginLeft: 8,
     alignSelf: 'flex-start',
+    marginTop: 8,
   },
   statusText: {
     color: 'white',
     fontSize: 10,
     fontWeight: '600',
-  },
-  upcomingSection: {
-    padding: 16,
-    backgroundColor: 'white',
-    marginHorizontal: 16,
-    marginBottom: 24,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  upcomingCard: {
-    backgroundColor: '#f8fafc',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 8,
-  },
-  upcomingDate: {
-    fontSize: 12,
-    color: '#64748b',
-    marginBottom: 4,
-  },
-  upcomingTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#0f172a',
-    marginBottom: 2,
-  },
-  upcomingTime: {
-    fontSize: 14,
-    color: '#64748b',
   },
 });

@@ -1,4 +1,4 @@
-// mobile-app/src/screens/Clinic/AppointmentFormScreen.tsx - VERSIÓN COMPLETA CORREGIDA
+// mobile-app/src/screens/Clinic/AppointmentFormScreen.tsx
 import React, { useState, useEffect } from 'react';
 import { 
   View, 
@@ -20,7 +20,6 @@ import { useAuth } from '../../hooks/useAuth';
 import axios from '../../api/axios-mobile';
 import { StackNavigationProp } from '@react-navigation/stack';
 
-// Definir tipos para navegación
 type RootStackParamList = {
   AppointmentForm: { id?: string; petId?: string; ownerId?: string };
 };
@@ -75,6 +74,7 @@ export default function AppointmentFormScreen() {
   const [availableTimeSlots, setAvailableTimeSlots] = useState<any[]>([]);
   const [loadingVets, setLoadingVets] = useState(false);
   const [loadingSlots, setLoadingSlots] = useState(false);
+  const [occupiedSlots, setOccupiedSlots] = useState<any[]>([]);
 
   useEffect(() => {
     loadData();
@@ -89,7 +89,6 @@ export default function AppointmentFormScreen() {
       fetchPets()
     ]);
     
-    // Si hay ownerId en los parámetros, cargar el dueño
     if (ownerId) {
       const owner = owners.find(o => o._id === ownerId);
       if (owner) {
@@ -97,7 +96,6 @@ export default function AppointmentFormScreen() {
       }
     }
     
-    // Si hay petId en los parámetros, cargar la mascota
     if (petId) {
       const pet = pets.find(p => p._id === petId);
       if (pet) {
@@ -106,11 +104,12 @@ export default function AppointmentFormScreen() {
     }
   };
 
-  // ✅ FUNCIÓN CORREGIDA: loadAvailableVeterinarians
-// mobile-app/src/screens/Clinic/AppointmentFormScreen.tsx
-// SOLO LAS FUNCIONES CORREGIDAS, el resto del archivo se mantiene igual
+  const loadAppointment = async () => {
+    if (!id) return;
+    Alert.alert('Info', 'Carga de cita existente - Funcionalidad por implementar');
+  };
 
-  // ✅ FUNCIÓN CORREGIDA: loadAvailableVeterinarians
+  // ✅ Cargar veterinarios SOLO cuando se presiona el botón
   const loadAvailableVeterinarians = async () => {
     if (!formData.appointmentDate) {
       Alert.alert('Error', 'Primero selecciona una fecha');
@@ -122,22 +121,17 @@ export default function AppointmentFormScreen() {
       const dateStr = formData.appointmentDate.toISOString().split('T')[0];
       console.log('📅 Buscando veterinarios para fecha:', dateStr);
       
-      // ✅ URL CORREGIDA: /api/veterinarians/available
       const response = await axios.get(`/api/veterinarians/available`, {
         params: { date: dateStr }
       });
       
-      console.log('👨‍⚕️ Respuesta veterinarios:', JSON.stringify(response.data, null, 2));
-      
       if (response.data.success) {
         const vets = response.data.veterinarians || [];
-        console.log(`✅ Veterinarios encontrados: ${vets.length}`);
         
-        // Transformar datos para asegurar formato consistente
         const formattedVets = vets.map((vet: any) => ({
           _id: vet._id,
           id: vet._id,
-          username: vet.username || vet.name || 'Veterinario',
+          username: vet.username || 'Veterinario',
           email: vet.email || '',
           specialty: vet.specialty || 'Medicina General',
           available: vet.available || false,
@@ -148,71 +142,24 @@ export default function AppointmentFormScreen() {
         setVeterinarians(formattedVets);
         
         if (formattedVets.length === 0) {
-          Alert.alert(
-            'Información',
-            response.data.message || 'No hay veterinarios registrados en el sistema.',
-            [{ text: 'OK' }]
-          );
+          Alert.alert('Información', 'No hay veterinarios registrados.', [{ text: 'OK' }]);
         } else {
           const availableCount = formattedVets.filter((v: any) => v.available).length;
-          console.log(`✅ Disponibles: ${availableCount}/${formattedVets.length}`);
-          
           if (availableCount === 0) {
-            Alert.alert(
-              'Sin disponibilidad',
-              'Todos los veterinarios están ocupados para esta fecha. Intenta con otra fecha.',
-              [{ text: 'OK' }]
-            );
+            Alert.alert('Sin disponibilidad', 'No hay veterinarios disponibles para esta fecha.', [{ text: 'OK' }]);
           }
-        }
-        
-        // Si hay veterinarios disponibles, abrir modal automáticamente
-        if (formattedVets.some((v: any) => v.available)) {
           setShowVetModal(true);
         }
-      } else {
-        Alert.alert('Error', response.data.message || 'Error al cargar veterinarios');
       }
     } catch (error: any) {
-      console.error('❌ Error loading veterinarians:', error);
-      console.error('❌ Error details:', error.response?.data || error.message);
-      
-      // Mensajes específicos
-      if (error.response?.status === 401) {
-        Alert.alert(
-          'Sesión expirada',
-          'Tu sesión ha expirado. Por favor inicia sesión nuevamente.',
-          [{ 
-            text: 'OK', 
-            onPress: () => logout() 
-          }]
-        );
-      } else if (error.response?.status === 404) {
-        Alert.alert(
-          'Endpoint no encontrado',
-          'El servidor no tiene configurado el endpoint de veterinarios.\n\n' +
-          'Verifica que el backend esté corriendo correctamente.',
-          [{ text: 'OK' }]
-        );
-      } else if (error.message?.includes('Network Error')) {
-        Alert.alert(
-          'Error de red',
-          'No se puede conectar al servidor. Verifica tu conexión a internet.',
-          [{ text: 'OK' }]
-        );
-      } else {
-        Alert.alert(
-          'Error',
-          error.response?.data?.message || 'No se pudieron cargar los veterinarios',
-          [{ text: 'OK' }]
-        );
-      }
+      console.error('❌ Error:', error);
+      Alert.alert('Error', 'No se pudieron cargar los veterinarios');
     } finally {
       setLoadingVets(false);
     }
   };
 
-  // ✅ FUNCIÓN CORREGIDA: loadVeterinarianTimeSlots
+  // ✅ Cargar horarios con verificación ESTRICTA de ocupados
   const loadVeterinarianTimeSlots = async (vetId: string) => {
     if (!formData.appointmentDate || !vetId) return;
     
@@ -221,56 +168,65 @@ export default function AppointmentFormScreen() {
       const dateStr = formData.appointmentDate.toISOString().split('T')[0];
       console.log('⏰ Buscando horarios para veterinario:', vetId, 'fecha:', dateStr);
       
-      // ✅ URL CORREGIDA: /api/veterinarians/{id}/availability
+      // 1. Obtener slots disponibles del backend
       const response = await axios.get(`/api/veterinarians/${vetId}/availability`, {
         params: { date: dateStr }
       });
       
-      console.log('🕒 Horarios disponibles:', JSON.stringify(response.data, null, 2));
+      // 2. Obtener citas existentes para esta fecha
+      const appointmentsResponse = await axios.get(`/api/veterinarians/${vetId}/appointments`, {
+        params: { date: dateStr }
+      });
       
-      if (response.data.success) {
-        const slots = response.data.availableSlots || [];
+      const appointments = appointmentsResponse.data?.appointments || [];
+      
+      // 3. Crear mapa de horarios ocupados
+      const occupiedMap = new Map();
+      appointments.forEach((apt: any) => {
+        if (['scheduled', 'confirmed', 'in-progress'].includes(apt.status)) {
+          const key = `${apt.startTime}-${apt.endTime}`;
+          occupiedMap.set(key, true);
+        }
+      });
+      
+      console.log('🚫 Horarios ocupados:', Array.from(occupiedMap.keys()));
+      setOccupiedSlots(appointments);
+      
+      // 4. Marcar slots como disponibles SOLO si no están ocupados
+      const slots = response.data.availableSlots || [];
+      const formattedSlots = slots.map((slot: any) => {
+        const slotKey = `${slot.start}-${slot.end}`;
+        const isOccupied = occupiedMap.has(slotKey);
         
-        // Transformar slots para asegurar formato
-        const formattedSlots = slots.map((slot: any) => ({
+        return {
           start: slot.start,
           end: slot.end,
-          available: slot.available !== false
-        }));
-        
-        setAvailableTimeSlots(formattedSlots);
-        
-        if (formattedSlots.length === 0) {
-          Alert.alert(
-            'Sin horarios disponibles',
-            'Este veterinario no tiene horarios disponibles para esta fecha.',
-            [{ text: 'OK' }]
-          );
+          available: !isOccupied,
+          occupied: isOccupied
+        };
+      });
+      
+      console.log('🕒 Slots con disponibilidad real:', 
+        formattedSlots.filter((s: any) => s.available).map((s: any) => `${s.start}-${s.end}`)
+      );
+      
+      setAvailableTimeSlots(formattedSlots);
+      
+      if (formattedSlots.length === 0) {
+        Alert.alert('Sin horarios', 'No hay horarios configurados.', [{ text: 'OK' }]);
+      } else {
+        const availableCount = formattedSlots.filter((s: any) => s.available).length;
+        if (availableCount === 0) {
+          Alert.alert('Horario ocupado', 'Todos los horarios están ocupados.', [{ text: 'OK' }]);
         } else {
           setShowTimeSlotsModal(true);
         }
-      } else {
-        Alert.alert('Error', response.data.message || 'No se pudieron cargar los horarios');
       }
     } catch (error: any) {
       console.error('❌ Error loading time slots:', error);
-      Alert.alert(
-        'Error',
-        error.response?.data?.message || 'No se pudieron cargar los horarios disponibles'
-      );
+      Alert.alert('Error', 'No se pudieron cargar los horarios');
     } finally {
       setLoadingSlots(false);
-    }
-  };
-
-  const loadAppointment = async () => {
-    if (!id) return;
-    
-    try {
-      // Aquí deberías implementar la carga de una cita existente
-      Alert.alert('Info', 'Carga de cita existente - Funcionalidad por implementar');
-    } catch (error) {
-      Alert.alert('Error', 'No se pudo cargar la cita');
     }
   };
 
@@ -290,7 +246,6 @@ export default function AppointmentFormScreen() {
       owner: pet.owner?._id || prev.owner
     }));
     
-    // Si no hay dueño seleccionado, buscarlo
     if (!selectedOwner && pet.owner) {
       const owner = owners.find(o => o._id === pet.owner._id);
       if (owner) {
@@ -304,14 +259,16 @@ export default function AppointmentFormScreen() {
   const handleSelectVeterinarian = (vet: any) => {
     setSelectedVet(vet);
     setFormData(prev => ({ ...prev, veterinarian: vet._id }));
-    
-    // Cargar horarios disponibles para este veterinario
     loadVeterinarianTimeSlots(vet._id);
-    
     setShowVetModal(false);
   };
 
   const handleSelectTimeSlot = (slot: any) => {
+    if (!slot.available) {
+      Alert.alert('Horario no disponible', 'Este horario ya está ocupado');
+      return;
+    }
+    
     setFormData(prev => ({
       ...prev,
       startTime: slot.start,
@@ -319,11 +276,7 @@ export default function AppointmentFormScreen() {
     }));
     setShowTimeSlotsModal(false);
     
-    Alert.alert(
-      'Horario seleccionado',
-      `✅ ${slot.start} - ${slot.end}`,
-      [{ text: 'OK' }]
-    );
+    Alert.alert('Horario seleccionado', `✅ ${slot.start} - ${slot.end}`, [{ text: 'OK' }]);
   };
 
   const handleDateChange = (event: any, date?: Date) => {
@@ -340,14 +293,11 @@ export default function AppointmentFormScreen() {
         endTime: ''
       });
       setSelectedVet(null);
-      
-      // Cargar veterinarios disponibles para la nueva fecha
-      loadAvailableVeterinarians();
+      setVeterinarians([]);
     }
   };
 
   const handleSubmit = async () => {
-    // Validaciones
     if (!formData.title.trim()) {
       Alert.alert('Error', 'El título es requerido');
       return;
@@ -365,6 +315,17 @@ export default function AppointmentFormScreen() {
     
     if (!formData.startTime || !formData.endTime) {
       Alert.alert('Error', 'Selecciona un horario');
+      return;
+    }
+
+    // Verificación final de disponibilidad
+    const isStillAvailable = !occupiedSlots.some((apt: any) => 
+      apt.startTime === formData.startTime && apt.endTime === formData.endTime
+    );
+
+    if (!isStillAvailable) {
+      Alert.alert('Error', 'Este horario ya no está disponible. Por favor selecciona otro.');
+      loadVeterinarianTimeSlots(formData.veterinarian);
       return;
     }
 
@@ -450,14 +411,12 @@ export default function AppointmentFormScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Veterinario */}
+        {/* Veterinario - AHORA con clic manual */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Veterinario *</Text>
           <TouchableOpacity 
             style={styles.selector}
-            onPress={() => {
-              loadAvailableVeterinarians();
-            }}
+            onPress={loadAvailableVeterinarians}
             disabled={loadingVets}
           >
             {loadingVets ? (
@@ -467,18 +426,20 @@ export default function AppointmentFormScreen() {
                 <Text style={formData.veterinarian ? styles.selectorTextSelected : styles.selectorText}>
                   {selectedVet 
                     ? `${selectedVet.username} (${selectedVet.specialty || 'Veterinario'})`
-                    : 'Seleccionar veterinario'}
+                    : '🔍 Toca para buscar veterinarios'}
                 </Text>
                 <Text style={styles.selectorArrow}>▼</Text>
               </>
             )}
           </TouchableOpacity>
           <Text style={styles.helperText}>
-            Se mostrarán solo veterinarios disponibles en la fecha seleccionada
+            {formData.appointmentDate 
+              ? `Buscar veterinarios disponibles para ${formData.appointmentDate.toLocaleDateString()}`
+              : 'Selecciona una fecha primero'}
           </Text>
         </View>
 
-        {/* Horario */}
+        {/* Horario - AHORA con verificación en tiempo real */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Horario *</Text>
           <TouchableOpacity 
@@ -493,14 +454,14 @@ export default function AppointmentFormScreen() {
             <Text style={formData.startTime ? styles.selectorTextSelected : styles.selectorText}>
               {formData.startTime 
                 ? `${formData.startTime} - ${formData.endTime}`
-                : 'Seleccionar horario'}
+                : '🔍 Toca para ver horarios disponibles'}
             </Text>
             <Text style={styles.selectorArrow}>▼</Text>
           </TouchableOpacity>
           <Text style={styles.helperText}>
             {!formData.veterinarian 
               ? 'Primero selecciona un veterinario'
-              : 'Selecciona un horario disponible'}
+              : 'Toca para ver horarios REALMENTE disponibles'}
           </Text>
         </View>
 
@@ -519,11 +480,6 @@ export default function AppointmentFormScreen() {
             </Text>
             {!ownerId && <Text style={styles.selectorArrow}>▼</Text>}
           </TouchableOpacity>
-          {ownerId && (
-            <Text style={styles.helperText}>
-              El dueño fue seleccionado automáticamente desde la pantalla anterior
-            </Text>
-          )}
         </View>
 
         {/* Mascota */}
@@ -541,11 +497,6 @@ export default function AppointmentFormScreen() {
             </Text>
             <Text style={styles.selectorArrow}>▼</Text>
           </TouchableOpacity>
-          <Text style={styles.helperText}>
-            {!formData.owner 
-              ? 'Primero selecciona un dueño'
-              : ownerPets.length === 0 ? 'Este dueño no tiene mascotas' : ''}
-          </Text>
         </View>
 
         {/* Tipo de cita */}
@@ -666,12 +617,12 @@ export default function AppointmentFormScreen() {
             {loadingVets ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#0891b2" />
-                <Text style={styles.loadingText}>Buscando veterinarios disponibles...</Text>
+                <Text style={styles.loadingText}>Buscando veterinarios...</Text>
               </View>
             ) : (
               <FlatList
                 data={veterinarians}
-                keyExtractor={(item) => item._id || item.id || Math.random().toString()}
+                keyExtractor={(item) => item._id || Math.random().toString()}
                 renderItem={({ item }) => (
                   <TouchableOpacity
                     style={[styles.modalItem, !item.available && styles.modalItemDisabled]}
@@ -680,12 +631,9 @@ export default function AppointmentFormScreen() {
                   >
                     <View style={styles.vetInfo}>
                       <Text style={styles.modalItemText}>
-                        {item.username} 
-                        {item.specialty && ` - ${item.specialty}`}
+                        {item.username} {item.specialty && `- ${item.specialty}`}
                       </Text>
-                      <Text style={styles.modalItemSubtext}>
-                        {item.email}
-                      </Text>
+                      <Text style={styles.modalItemSubtext}>{item.email}</Text>
                       <View style={styles.availabilityIndicator}>
                         <View style={[
                           styles.availabilityDot,
@@ -695,18 +643,13 @@ export default function AppointmentFormScreen() {
                           {item.available ? '🟢 Disponible' : '🔴 No disponible'}
                         </Text>
                       </View>
-                      {item.availableSlots && item.availableSlots.length > 0 && (
-                        <Text style={styles.slotsInfo}>
-                          {item.availableSlots.length} horarios disponibles
-                        </Text>
-                      )}
                     </View>
                   </TouchableOpacity>
                 )}
                 ListEmptyComponent={
                   <View style={styles.emptyContainer}>
                     <Text style={styles.emptyModalText}>
-                      No hay veterinarios disponibles para esta fecha
+                      No hay veterinarios disponibles
                     </Text>
                     <TouchableOpacity 
                       style={styles.emptyButton}
@@ -722,7 +665,7 @@ export default function AppointmentFormScreen() {
         </View>
       </Modal>
 
-      {/* Modal de Horarios Disponibles */}
+      {/* Modal de Horarios - AHORA con indicador visual de ocupados */}
       <Modal
         visible={showTimeSlotsModal}
         animationType="slide"
@@ -745,54 +688,48 @@ export default function AppointmentFormScreen() {
                 <ActivityIndicator size="large" color="#0891b2" />
                 <Text style={styles.loadingText}>Cargando horarios...</Text>
               </View>
-            ) : availableTimeSlots.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyModalText}>
-                  No hay horarios disponibles para este veterinario
-                </Text>
-                <TouchableOpacity 
-                  style={styles.emptyButton}
-                  onPress={() => setShowTimeSlotsModal(false)}
-                >
-                  <Text style={styles.emptyButtonText}>Cerrar</Text>
-                </TouchableOpacity>
-              </View>
             ) : (
               <FlatList
                 data={availableTimeSlots}
                 keyExtractor={(item, index) => `${item.start}-${item.end}-${index}`}
+                numColumns={2}
                 renderItem={({ item }) => (
                   <TouchableOpacity
                     style={[
                       styles.timeSlotItem,
-                      !item.available && styles.timeSlotItemDisabled
+                      !item.available && styles.timeSlotItemOccupied,
+                      item.available && styles.timeSlotItemAvailable
                     ]}
-                    onPress={() => item.available && handleSelectTimeSlot(item)}
+                    onPress={() => handleSelectTimeSlot(item)}
                     disabled={!item.available}
                   >
                     <Text style={[
                       styles.timeSlotText,
-                      !item.available && styles.timeSlotTextDisabled
+                      !item.available && styles.timeSlotTextOccupied
                     ]}>
                       {item.start} - {item.end}
                     </Text>
-                    <Text style={[
-                      styles.timeSlotStatus,
-                      item.available ? styles.timeSlotAvailable : styles.timeSlotUnavailable
-                    ]}>
-                      {item.available ? '🟢 Disponible' : '🔴 Ocupado'}
-                    </Text>
+                    <View style={styles.timeSlotStatusContainer}>
+                      <View style={[
+                        styles.timeSlotDot,
+                        item.available ? styles.timeSlotDotAvailable : styles.timeSlotDotOccupied
+                      ]} />
+                      <Text style={[
+                        styles.timeSlotStatusText,
+                        item.available ? styles.timeSlotTextAvailable : styles.timeSlotTextOccupied
+                      ]}>
+                        {item.available ? 'Disponible' : 'Ocupado'}
+                      </Text>
+                    </View>
                   </TouchableOpacity>
                 )}
-                numColumns={2}
                 columnWrapperStyle={styles.timeSlotGrid}
-                ListFooterComponent={
-                  <TouchableOpacity 
-                    style={styles.closeButton}
-                    onPress={() => setShowTimeSlotsModal(false)}
-                  >
-                    <Text style={styles.closeButtonText}>Cancelar</Text>
-                  </TouchableOpacity>
+                ListEmptyComponent={
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyModalText}>
+                      No hay horarios disponibles
+                    </Text>
+                  </View>
                 }
               />
             )}
@@ -817,7 +754,7 @@ export default function AppointmentFormScreen() {
             </View>
             <FlatList
               data={owners}
-              keyExtractor={(item) => item._id || item.id || Math.random().toString()}
+              keyExtractor={(item) => item._id || Math.random().toString()}
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={styles.modalItem}
@@ -832,9 +769,7 @@ export default function AppointmentFormScreen() {
                 </TouchableOpacity>
               )}
               ListEmptyComponent={
-                <Text style={styles.emptyModalText}>
-                  No hay dueños registrados
-                </Text>
+                <Text style={styles.emptyModalText}>No hay dueños registrados</Text>
               }
             />
           </View>
@@ -858,7 +793,7 @@ export default function AppointmentFormScreen() {
             </View>
             <FlatList
               data={ownerPets}
-              keyExtractor={(item) => item._id || item.id || Math.random().toString()}
+              keyExtractor={(item) => item._id || Math.random().toString()}
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={styles.modalItem}
@@ -1080,7 +1015,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 4,
   },
   availabilityDot: {
     width: 8,
@@ -1096,11 +1030,6 @@ const styles = StyleSheet.create({
   availabilityText: {
     fontSize: 12,
     color: '#6b7280',
-  },
-  slotsInfo: {
-    fontSize: 11,
-    color: '#0891b2',
-    fontStyle: 'italic',
   },
   emptyContainer: {
     alignItems: 'center',
@@ -1121,54 +1050,82 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 14,
   },
-  timeSlotItem: {
-    backgroundColor: '#f0f9ff',
-    borderWidth: 1,
-    borderColor: '#bae6fd',
-    borderRadius: 8,
-    padding: 12,
-    alignItems: 'center',
-    flex: 1,
-    margin: 4,
-  },
-  timeSlotItemDisabled: {
-    backgroundColor: '#f1f5f9',
-    borderColor: '#e5e7eb',
-    opacity: 0.6,
-  },
-  timeSlotText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#0c4a6e',
-    marginBottom: 4,
-  },
-  timeSlotTextDisabled: {
-    color: '#94a3b8',
-  },
-  timeSlotStatus: {
-    fontSize: 12,
-  },
-  timeSlotAvailable: {
-    color: '#059669',
-  },
-  timeSlotUnavailable: {
-    color: '#dc2626',
-  },
   timeSlotGrid: {
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 8,
   },
-  closeButton: {
-    backgroundColor: '#f1f5f9',
-    padding: 16,
+  timeSlotItem: {
     borderRadius: 8,
+    padding: 12,
     alignItems: 'center',
-    marginHorizontal: 16,
-    marginVertical: 8,
+    flex: 1,
+    margin: 4,
+    borderWidth: 1,
   },
-  closeButtonText: {
-    color: '#64748b',
-    fontWeight: '500',
+  timeSlotItemAvailable: {
+    backgroundColor: '#f0f9ff',
+    borderColor: '#bae6fd',
+  },
+  timeSlotItemOccupied: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#fecaca',
+    opacity: 0.7,
+  },
+  timeSlotText: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  timeSlotTextOccupied: {
+    color: '#9ca3af',
+    textDecorationLine: 'line-through',
+  },
+  timeSlotStatusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  timeSlotDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  timeSlotDotAvailable: {
+    backgroundColor: '#10b981',
+  },
+  timeSlotDotOccupied: {
+    backgroundColor: '#ef4444',
+  },
+  timeSlotStatusText: {
+    fontSize: 10,
+  },
+  timeSlotTextAvailable: {
+    color: '#10b981',
   },
 });
+
+// Funciones auxiliares fuera del componente
+const getStatusColor = (status: string) => {
+  switch(status) {
+    case 'scheduled': return '#3b82f6';
+    case 'confirmed': return '#10b981';
+    case 'in-progress': return '#f59e0b';
+    case 'completed': return '#6b7280';
+    case 'cancelled': return '#ef4444';
+    case 'no-show': return '#8b5cf6';
+    default: return '#9ca3af';
+  }
+};
+
+const getStatusText = (status: string) => {
+  const statusMap: Record<string, string> = {
+    'scheduled': 'Programada',
+    'confirmed': 'Confirmada',
+    'in-progress': 'En progreso',
+    'completed': 'Completada',
+    'cancelled': 'Cancelada',
+    'no-show': 'No asistió'
+  };
+  return statusMap[status] || status;
+};
