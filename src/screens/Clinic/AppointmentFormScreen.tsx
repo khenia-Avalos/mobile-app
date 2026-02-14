@@ -107,6 +107,10 @@ export default function AppointmentFormScreen() {
   };
 
   // ✅ FUNCIÓN CORREGIDA: loadAvailableVeterinarians
+// mobile-app/src/screens/Clinic/AppointmentFormScreen.tsx
+// SOLO LAS FUNCIONES CORREGIDAS, el resto del archivo se mantiene igual
+
+  // ✅ FUNCIÓN CORREGIDA: loadAvailableVeterinarians
   const loadAvailableVeterinarians = async () => {
     if (!formData.appointmentDate) {
       Alert.alert('Error', 'Primero selecciona una fecha');
@@ -118,27 +122,40 @@ export default function AppointmentFormScreen() {
       const dateStr = formData.appointmentDate.toISOString().split('T')[0];
       console.log('📅 Buscando veterinarios para fecha:', dateStr);
       
+      // ✅ URL CORREGIDA: /api/veterinarians/available
       const response = await axios.get(`/api/veterinarians/available`, {
         params: { date: dateStr }
       });
       
-      console.log('👨‍⚕️ Respuesta veterinarios:', response.data);
+      console.log('👨‍⚕️ Respuesta veterinarios:', JSON.stringify(response.data, null, 2));
       
       if (response.data.success) {
         const vets = response.data.veterinarians || [];
         console.log(`✅ Veterinarios encontrados: ${vets.length}`);
         
-        setVeterinarians(vets);
+        // Transformar datos para asegurar formato consistente
+        const formattedVets = vets.map((vet: any) => ({
+          _id: vet._id,
+          id: vet._id,
+          username: vet.username || vet.name || 'Veterinario',
+          email: vet.email || '',
+          specialty: vet.specialty || 'Medicina General',
+          available: vet.available || false,
+          availableSlots: vet.availableSlots || [],
+          reason: vet.reason || ''
+        }));
         
-        if (vets.length === 0) {
+        setVeterinarians(formattedVets);
+        
+        if (formattedVets.length === 0) {
           Alert.alert(
             'Información',
-            'No hay veterinarios registrados en el sistema.',
+            response.data.message || 'No hay veterinarios registrados en el sistema.',
             [{ text: 'OK' }]
           );
         } else {
-          const availableCount = vets.filter((v: any) => v.available).length;
-          console.log(`✅ Disponibles: ${availableCount}/${vets.length}`);
+          const availableCount = formattedVets.filter((v: any) => v.available).length;
+          console.log(`✅ Disponibles: ${availableCount}/${formattedVets.length}`);
           
           if (availableCount === 0) {
             Alert.alert(
@@ -150,7 +167,7 @@ export default function AppointmentFormScreen() {
         }
         
         // Si hay veterinarios disponibles, abrir modal automáticamente
-        if (vets.some((v: any) => v.available)) {
+        if (formattedVets.some((v: any) => v.available)) {
           setShowVetModal(true);
         }
       } else {
@@ -209,13 +226,21 @@ export default function AppointmentFormScreen() {
         params: { date: dateStr }
       });
       
-      console.log('🕒 Horarios disponibles:', response.data);
+      console.log('🕒 Horarios disponibles:', JSON.stringify(response.data, null, 2));
       
       if (response.data.success) {
         const slots = response.data.availableSlots || [];
-        setAvailableTimeSlots(slots);
         
-        if (slots.length === 0) {
+        // Transformar slots para asegurar formato
+        const formattedSlots = slots.map((slot: any) => ({
+          start: slot.start,
+          end: slot.end,
+          available: slot.available !== false
+        }));
+        
+        setAvailableTimeSlots(formattedSlots);
+        
+        if (formattedSlots.length === 0) {
           Alert.alert(
             'Sin horarios disponibles',
             'Este veterinario no tiene horarios disponibles para esta fecha.',
