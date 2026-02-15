@@ -71,8 +71,18 @@ export const createAppointmentRequest = (appointment: any) => {
   return axios.post('/api/appointments', appointment);
 };
 
+// ✅ FUNCIÓN CORREGIDA - AHORA DETECTA CAMBIOS DE ESTADO
 export const updateAppointmentRequest = (id: string, appointment: any) => {
-  console.log('✏️ PUT /api/appointments/' + id);
+  console.log('✏️ PUT/PATCH /api/appointments/' + id, appointment);
+  
+  // Si SOLO está cambiando el status (un solo campo y es status)
+  if (Object.keys(appointment).length === 1 && appointment.status) {
+    console.log('   → 📍 Detectado cambio de estado, usando PATCH /status');
+    return axios.patch(`/api/appointments/${id}/status`, { status: appointment.status });
+  }
+  
+  // Si tiene múltiples campos, usa PUT normal
+  console.log('   → 📝 Actualización completa, usando PUT');
   return axios.put(`/api/appointments/${id}`, appointment);
 };
 

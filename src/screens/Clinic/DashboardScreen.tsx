@@ -28,9 +28,11 @@ export default function DashboardScreen() {
   
   const [refreshing, setRefreshing] = useState(false);
   const [todayAppointments, setTodayAppointments] = useState<any[]>([]);
+  const [staffCount, setStaffCount] = useState(0);
   
   useEffect(() => {
     loadData();
+    fetchStaffCount();
   }, []);
   
   const loadData = async () => {
@@ -40,31 +42,38 @@ export default function DashboardScreen() {
     await Promise.all([
       fetchOwners(),
       fetchPets(),
-      fetchAppointments({ date: today }) // ✅ SOLO CITAS DE HOY
+      fetchAppointments({ date: today })
     ]);
+  };
+  
+  const fetchStaffCount = async () => {
+    try {
+      // Aquí deberías obtener el conteo real del personal desde tu API
+      // Por ahora simulamos con un número fijo
+      setStaffCount(8);
+    } catch (error) {
+      console.error('Error fetching staff count:', error);
+    }
   };
   
   const onRefresh = async () => {
     setRefreshing(true);
     await loadData();
+    await fetchStaffCount();
     setRefreshing(false);
   };
   
-  // ✅ CORREGIDO: Filtrar por FECHA y STATUS
+  // Filtrar citas de hoy por fecha y status
   useEffect(() => {
     const today = new Date().toISOString().split('T')[0];
     
     const todayApts = appointments.filter(apt => {
-      // Obtener la fecha de la cita en formato YYYY-MM-DD
       const aptDate = apt.appointmentDate ? new Date(apt.appointmentDate).toISOString().split('T')[0] : null;
-      
-      // Verificar que sea de hoy Y que tenga status válido
       return aptDate === today && 
              (apt.status === 'scheduled' || apt.status === 'confirmed');
     });
     
     console.log(`📊 Citas filtradas para hoy: ${todayApts.length} de ${appointments.length} totales`);
-    
     setTodayAppointments(todayApts);
   }, [appointments]);
   
@@ -96,7 +105,16 @@ export default function DashboardScreen() {
       );
     }
   };
-  
+
+  // ✅ Navegar a la lista de pacientes (nueva pantalla Patients)
+  const navigateToPatients = () => {
+    navigation.navigate('Patients' as never);
+  };
+
+  // ✅ Navegar a la lista de personal
+const navigateToStaff = () => {
+  navigation.navigate('Staff' as never);
+};
   return (
     <ScrollView 
       style={styles.container}
@@ -142,13 +160,7 @@ export default function DashboardScreen() {
         
         <TouchableOpacity 
           style={styles.statCard}
-          onPress={() => {
-            Alert.alert(
-              'Mascotas', 
-              `${pets.length} mascotas registradas.`,
-              [{ text: 'OK' }]
-            );
-          }}
+          onPress={navigateToPatients}
         >
           <Text style={styles.statNumber}>{pets.length}</Text>
           <Text style={styles.statLabel}>Pacientes</Text>
@@ -156,16 +168,10 @@ export default function DashboardScreen() {
         
         <TouchableOpacity 
           style={styles.statCard}
-          onPress={() => {
-            Alert.alert(
-              'Citas Hoy', 
-              `${todayAppointments.length} citas programadas para hoy.`,
-              [{ text: 'OK' }]
-            );
-          }}
+          onPress={navigateToStaff}
         >
-          <Text style={styles.statNumber}>{todayAppointments.length}</Text>
-          <Text style={styles.statLabel}>Citas Hoy</Text>
+          <Text style={styles.statNumber}>{staffCount}</Text>
+          <Text style={styles.statLabel}>Personal</Text>
         </TouchableOpacity>
       </View>
       
@@ -182,6 +188,7 @@ export default function DashboardScreen() {
             <Text style={styles.actionIcon}>👤</Text>
             <Text style={styles.actionText}>Nuevo Cliente</Text>
           </TouchableOpacity>
+          
           
           <TouchableOpacity 
             style={styles.actionButton}

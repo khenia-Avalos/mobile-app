@@ -12,14 +12,21 @@ import {
   Platform
 } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import axios from '../api/axios-mobile';
 
 export default function ProfileScreen() {
   const { user, logout, updateUserProfile } = useAuth();
   const navigation = useNavigation();
+  const route = useRoute();
+  
+  // Obtener parámetros de navegación
+  const { userId, isEditing: isEditingFromParams } = (route.params as { userId?: string; isEditing?: boolean }) || {};
 
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(isEditingFromParams || false);
   const [loading, setLoading] = useState(false);
+  const [profileUser, setProfileUser] = useState<any>(null);
+  const [loadingProfile, setLoadingProfile] = useState(false);
   const [formData, setFormData] = useState({
     username: '',
     lastname: '',
@@ -28,17 +35,57 @@ export default function ProfileScreen() {
     specialty: '',
   });
 
+  // Determinar si estamos viendo nuestro propio perfil o el de otro
+  const isOwnProfile = !userId || userId === user?.id;
+
   useEffect(() => {
-    if (user) {
-      setFormData({
-        username: user.username || '',
-        lastname: user.lastname || '',
-        email: user.email || '',
-        phoneNumber: user.phoneNumber || '',
-        specialty: user.specialty || '',
-      });
+    if (userId && userId !== user?.id) {
+      // Cargar perfil de otro usuario
+      loadUserProfile(userId);
+    } else {
+      // Usar el perfil del usuario autenticado
+      setProfileUser(user);
+      if (user) {
+        setFormData({
+          username: user.username || '',
+          lastname: user.lastname || '',
+          email: user.email || '',
+          phoneNumber: user.phoneNumber || '',
+          specialty: user.specialty || '',
+        });
+      }
     }
-  }, [user]);
+  }, [userId, user]);
+
+  const loadUserProfile = async (id: string) => {
+    setLoadingProfile(true);
+    try {
+      const response = await axios.get('/api/admin/users');
+      const users = response.data?.users || response.data || [];
+      
+      const foundUser = users.find((u: any) => u._id === id || u.id === id);
+      
+      if (foundUser) {
+        setProfileUser(foundUser);
+        setFormData({
+          username: foundUser.username || '',
+          lastname: foundUser.lastname || '',
+          email: foundUser.email || '',
+          phoneNumber: foundUser.phoneNumber || '',
+          specialty: foundUser.specialty || '',
+        });
+      } else {
+        Alert.alert('Error', 'Usuario no encontrado');
+        navigation.goBack();
+      }
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+      Alert.alert('Error', 'No se pudo cargar el perfil del usuario');
+      navigation.goBack();
+    } finally {
+      setLoadingProfile(false);
+    }
+  };
 
   const handleLogout = async () => {
     Alert.alert(
@@ -77,38 +124,84 @@ export default function ProfileScreen() {
 
     setLoading(true);
     try {
-      const result = await updateUserProfile(formData);
+      let result;
       
-      if (result.ok) {
+      if (isOwnProfile) {
+        result = await updateUserProfile(formData);
+      } else {
+        const response = await axios.put(`/api/admin/users/${userId}`, formData);
+        result = response.data;
+      }
+      
+      if (result.success) {
         Alert.alert(
           'Éxito',
           'Perfil actualizado correctamente',
-          [{ text: 'OK' }]
+          [{ text: 'OK', onPress: () => {
+            setIsEditing(false);
+            if (!isOwnProfile) {
+              navigation.goBack();
+            }
+          }}]
         );
-        setIsEditing(false);
+        
+        if (profileUser) {
+          setProfileUser({
+            ...profileUser,
+            ...formData
+          });
+        }
       } else {
-        Alert.alert(
-          'Error',
-          'No se pudo actualizar el perfil',
-          [{ text: 'OK' }]
-        );
+        Alert.alert('Error', 'No se pudo actualizar el perfil');
       }
-    } catch (error) {
-      Alert.alert('Error', 'No se pudo conectar con el servidor');
+    } catch (error: any) {
+      console.error('Error saving profile:', error);
+      Alert.alert('Error', error.response?.data?.[0] || 'No se pudo conectar con el servidor');
     } finally {
       setLoading(false);
     }
   };
 
   const handleCancel = () => {
-    setFormData({
-      username: user?.username || '',
-      lastname: user?.lastname || '',
-      email: user?.email || '',
-      phoneNumber: user?.phoneNumber || '',
-      specialty: user?.specialty || '',
-    });
+    if (profileUser) {
+      setFormData({
+        username: profileUser.username || '',
+        lastname: profileUser.lastname || '',
+        email: profileUser.email || '',
+        phoneNumber: profileUser.phoneNumber || '',
+        specialty: profileUser.specialty || '',
+      });
+    }
     setIsEditing(false);
+    if (!isOwnProfile) {
+      navigation.goBack();
+    }
+  };
+
+  // ✅ FUNCIÓN CORREGIDA - SIEMPRE navega a ForgotPassword
+  const handleChangePassword = () => {
+    // Si es admin editando otro usuario
+    if (!isOwnProfile && user?.role === 'admin') {
+      Alert.alert(
+        'Cambiar Contraseña',
+        `¿Estás seguro de que quieres cambiar la contraseña de ${profileUser?.username}?\n\nSerás redirigido a la pantalla de recuperación de contraseña.`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Sí, continuar',
+            onPress: () => {
+              // Navegar a ForgotPassword igual que el perfil propio
+              navigation.navigate('ForgotPassword' as never);
+            }
+          }
+        ]
+      );
+    } else if (isOwnProfile) {
+      // Es su propio perfil
+      navigation.navigate('ForgotPassword' as never);
+    } else {
+      Alert.alert('Acción no permitida', 'No tienes permiso para cambiar esta contraseña');
+    }
   };
 
   const getRoleText = (role: string) => {
@@ -122,10 +215,38 @@ export default function ProfileScreen() {
   };
 
   const getInitials = () => {
-    const first = user?.username?.charAt(0) || '';
-    const last = user?.lastname?.charAt(0) || '';
+    const first = profileUser?.username?.charAt(0) || '';
+    const last = profileUser?.lastname?.charAt(0) || '';
     return (first + last).toUpperCase();
   };
+
+  const getRoleColor = (role: string) => {
+    switch(role) {
+      case 'admin': return '#ef4444';
+      case 'veterinarian': return '#0891b2';
+      case 'assistant': return '#f59e0b';
+      default: return '#6b7280';
+    }
+  };
+
+  if (loadingProfile) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#219eb4" />
+        <Text style={styles.loadingText}>Cargando perfil...</Text>
+      </View>
+    );
+  }
+
+  const displayUser = profileUser || user;
+
+  if (!displayUser) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.errorText}>No se pudo cargar el perfil</Text>
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView 
@@ -139,9 +260,11 @@ export default function ProfileScreen() {
             <Text style={styles.avatarText}>{getInitials()}</Text>
           </View>
           <Text style={styles.userName}>
-            {user?.username} {user?.lastname}
+            {displayUser.username} {displayUser.lastname}
           </Text>
-        
+          <View style={[styles.roleBadge, { backgroundColor: getRoleColor(displayUser.role) }]}>
+            <Text style={styles.roleBadgeText}>{getRoleText(displayUser.role)}</Text>
+          </View>
         </View>
 
         {/* Tarjeta de información */}
@@ -150,18 +273,17 @@ export default function ProfileScreen() {
             <Text style={styles.cardTitle}>
               {isEditing ? 'Editar Perfil' : 'Información Personal'}
             </Text>
-            {!isEditing && (
+            {!isEditing && (isOwnProfile || user?.role === 'admin') && (
               <TouchableOpacity 
                 style={styles.editButton}
                 onPress={() => setIsEditing(true)}
               >
-                <Text style={styles.editButtonText}> Editar</Text>
+                <Text style={styles.editButtonText}>✏️ Editar</Text>
               </TouchableOpacity>
             )}
           </View>
 
           {isEditing ? (
-            // MODO EDICIÓN
             <View style={styles.form}>
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Nombre *</Text>
@@ -206,7 +328,7 @@ export default function ProfileScreen() {
                 />
               </View>
 
-              {user?.role === 'veterinarian' && (
+              {displayUser?.role === 'veterinarian' && (
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Especialidad</Text>
                   <TextInput
@@ -241,13 +363,12 @@ export default function ProfileScreen() {
               </View>
             </View>
           ) : (
-            // MODO VISUALIZACIÓN
             <View>
               <View style={styles.infoRow}>
                 <View style={styles.infoContent}>
                   <Text style={styles.infoLabel}>Nombre completo</Text>
                   <Text style={styles.infoValue}>
-                    {user?.username} {user?.lastname}
+                    {displayUser.username} {displayUser.lastname}
                   </Text>
                 </View>
               </View>
@@ -255,22 +376,22 @@ export default function ProfileScreen() {
               <View style={styles.infoRow}>
                 <View style={styles.infoContent}>
                   <Text style={styles.infoLabel}>Correo electrónico</Text>
-                  <Text style={styles.infoValue}>{user?.email}</Text>
+                  <Text style={styles.infoValue}>{displayUser.email}</Text>
                 </View>
               </View>
 
               <View style={styles.infoRow}>
                 <View style={styles.infoContent}>
                   <Text style={styles.infoLabel}>Teléfono</Text>
-                  <Text style={styles.infoValue}>{user?.phoneNumber || 'No registrado'}</Text>
+                  <Text style={styles.infoValue}>{displayUser.phoneNumber || 'No registrado'}</Text>
                 </View>
               </View>
 
-              {user?.role === 'veterinarian' && (
+              {displayUser?.role === 'veterinarian' && (
                 <View style={styles.infoRow}>
                   <View style={styles.infoContent}>
                     <Text style={styles.infoLabel}>Especialidad</Text>
-                    <Text style={styles.infoValue}>{user?.specialty || 'Medicina General'}</Text>
+                    <Text style={styles.infoValue}>{displayUser.specialty || 'Medicina General'}</Text>
                   </View>
                 </View>
               )}
@@ -278,25 +399,41 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        {/* Configuración */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Configuración</Text>
-          
-      <TouchableOpacity 
-    style={styles.menuItem}
-    onPress={() => navigation.navigate('ForgotPassword' as never)}
-  >
-    <View style={styles.menuItemLeft}>
-      <Text style={styles.menuItemText}>Cambiar contraseña</Text>
-    </View>
-    <Text style={styles.menuItemArrow}>›</Text>
-  </TouchableOpacity>
-        </View>
+        {/* ✅ CONFIGURACIÓN - Visible para perfil propio O para administradores editando otros */}
+        {(isOwnProfile || (user?.role === 'admin' && !isOwnProfile)) && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Configuración</Text>
+            
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={handleChangePassword}
+            >
+              <View style={styles.menuItemLeft}>
+                <Text style={styles.menuItemText}>
+                  {isOwnProfile ? 'Cambiar contraseña' : `Cambiar contraseña de ${profileUser?.username}`}
+                </Text>
+              </View>
+              <Text style={styles.menuItemArrow}>›</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
-        {/* Botón de cerrar sesión */}
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutButtonText}>Cerrar Sesión</Text>
-        </TouchableOpacity>
+        {/* Botón de cerrar sesión - SOLO para perfil propio */}
+        {isOwnProfile && (
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <Text style={styles.logoutButtonText}>Cerrar Sesión</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Botón para volver - para perfiles de otros usuarios */}
+        {!isOwnProfile && (
+          <TouchableOpacity 
+            style={styles.backButton} 
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.backButtonText}>← Volver</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -306,6 +443,21 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f1f5f9',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f1f5f9',
+  },
+  loadingText: {
+    marginTop: 12,
+    color: '#64748b',
+    fontSize: 16,
+  },
+  errorText: {
+    color: '#ef4444',
+    fontSize: 16,
   },
   header: {
     backgroundColor: '#219eb4',
@@ -337,21 +489,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: 'white',
     marginBottom: 8,
+    textAlign: 'center',
   },
   roleBadge: {
     paddingHorizontal: 16,
     paddingVertical: 6,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-  },
-  roleAdmin: {
-    backgroundColor: '#8b5cf6',
-  },
-  roleVet: {
-    backgroundColor: '#0891b2',
-  },
-  roleAssistant: {
-    backgroundColor: '#6b7280',
   },
   roleBadgeText: {
     color: 'white',
@@ -496,5 +639,18 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  backButton: {
+    backgroundColor: '#e2e8f0',
+    marginHorizontal: 16,
+    marginBottom: 24,
+    padding: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  backButtonText: {
+    color: '#0f172a',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

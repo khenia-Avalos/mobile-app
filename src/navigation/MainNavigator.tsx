@@ -4,7 +4,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { View, ActivityIndicator } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
 
-// PANTALLAS PÚBLICAS
+// PANTALLAS PÚBLICAS (SIEMPRE ACCESIBLES)
 import HomeScreen from '../screens/HomeScreen';
 import LoginScreen from '../screens/Auth/LoginScreen';
 import RegisterScreen from '../screens/Auth/RegisterScreen';
@@ -19,6 +19,8 @@ import OwnerDetailScreen from '../screens/Clinic/OwnerDetailScreen';
 import PetFormScreen from '../screens/Clinic/PetFormScreen';
 import AppointmentFormScreen from '../screens/Clinic/AppointmentFormScreen';
 import AppointmentsScreen from '../screens/Clinic/AppointmentsScreen';
+import PatientsScreen from '../screens/Clinic/PatientsScreen';
+import StaffScreen from '../screens/Clinic/StaffScreen';
 
 // PANTALLAS AUTENTICADAS (DOCTOR)
 import DoctorDashboardScreen from '../screens/Clinic/DoctorDashboardScreen';
@@ -52,65 +54,66 @@ export default function MainNavigator() {
     );
   }
 
-  // USUARIO NO AUTENTICADO
-  if (!isAuthenticated || !user) {
-    return (
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="Home" component={HomeScreen} />
-        <Stack.Screen name="Login" component={LoginScreen} />
-        <Stack.Screen name="Register" component={RegisterScreen} />
-        <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-        <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
-      </Stack.Navigator>
-    );
-  }
-
-  // USUARIO AUTENTICADO - REDIRECCIÓN POR ROL
-  switch (user.role) {
-    case 'admin':
-      return (
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="Dashboard" component={DashboardScreen} />
-          <Stack.Screen name="Register" component={RegisterScreen} />
-          <Stack.Screen name="Owners" component={OwnersScreen} />
-          <Stack.Screen name="OwnerForm" component={OwnerFormScreen} />
-          <Stack.Screen name="OwnerDetail" component={OwnerDetailScreen} />
-          <Stack.Screen name="PetForm" component={PetFormScreen} />
-          <Stack.Screen name="Appointments" component={AppointmentsScreen} />
-          <Stack.Screen name="AppointmentForm" component={AppointmentFormScreen} />
-          <Stack.Screen name="Tasks" component={TasksScreen} />
-          <Stack.Screen name="TaskForm" component={TaskFormScreen} />
-          <Stack.Screen name="Profile" component={ProfileScreen} />
-        </Stack.Navigator>
-      );
-
-    case 'veterinarian':
-      return (
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="DoctorDashboard" component={DoctorDashboardScreen} />
-          <Stack.Screen name="Profile" component={ProfileScreen} />
-        </Stack.Navigator>
-      );
-
-    case 'assistant':
-      return (
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="ReceptionDashboard" component={ReceptionDashboardScreen} />
-          <Stack.Screen name="Owners" component={OwnersScreen} />
-          <Stack.Screen name="OwnerForm" component={OwnerFormScreen} />
-          <Stack.Screen name="PetForm" component={PetFormScreen} />
-          <Stack.Screen name="Appointments" component={AppointmentsScreen} />
-          <Stack.Screen name="AppointmentForm" component={AppointmentFormScreen} />
-          <Stack.Screen name="Profile" component={ProfileScreen} />
-        </Stack.Navigator>
-      );
-
-    default:
-      return (
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      {!isAuthenticated || !user ? (
+        // USUARIO NO AUTENTICADO
+        <>
           <Stack.Screen name="Home" component={HomeScreen} />
-          <Stack.Screen name="Profile" component={ProfileScreen} />
-        </Stack.Navigator>
-      );
-  }
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Register" component={RegisterScreen} />
+          <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+          <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+        </>
+      ) : (
+        // USUARIO AUTENTICADO - REDIRECCIÓN POR ROL
+        user.role === 'admin' ? (
+          <>
+            <Stack.Screen name="Dashboard" component={DashboardScreen} />
+            <Stack.Screen name="Register" component={RegisterScreen} />
+            <Stack.Screen name="Owners" component={OwnersScreen} />
+            <Stack.Screen name="OwnerForm" component={OwnerFormScreen} />
+            <Stack.Screen name="OwnerDetail" component={OwnerDetailScreen} />
+            <Stack.Screen name="PetForm" component={PetFormScreen} />
+            <Stack.Screen name="Appointments" component={AppointmentsScreen} />
+            <Stack.Screen name="AppointmentForm" component={AppointmentFormScreen} />
+            <Stack.Screen name="Tasks" component={TasksScreen} />
+            <Stack.Screen name="TaskForm" component={TaskFormScreen} />
+            <Stack.Screen name="Profile" component={ProfileScreen} />
+            <Stack.Screen name="Patients" component={PatientsScreen} />
+            <Stack.Screen name="Staff" component={StaffScreen} />
+            {/* ✅ Agregar ForgotPassword también en autenticado */}
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+            <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+          </>
+        ) : user.role === 'veterinarian' ? (
+          <>
+            <Stack.Screen name="DoctorDashboard" component={DoctorDashboardScreen} />
+            <Stack.Screen name="Profile" component={ProfileScreen} />
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+            <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+          </>
+        ) : user.role === 'assistant' ? (
+          <>
+            <Stack.Screen name="ReceptionDashboard" component={ReceptionDashboardScreen} />
+            <Stack.Screen name="Owners" component={OwnersScreen} />
+            <Stack.Screen name="OwnerForm" component={OwnerFormScreen} />
+            <Stack.Screen name="PetForm" component={PetFormScreen} />
+            <Stack.Screen name="Appointments" component={AppointmentsScreen} />
+            <Stack.Screen name="AppointmentForm" component={AppointmentFormScreen} />
+            <Stack.Screen name="Profile" component={ProfileScreen} />
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+            <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+          </>
+        ) : (
+          <>
+            <Stack.Screen name="Home" component={HomeScreen} />
+            <Stack.Screen name="Profile" component={ProfileScreen} />
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+            <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+          </>
+        )
+      )}
+    </Stack.Navigator>
+  );
 }

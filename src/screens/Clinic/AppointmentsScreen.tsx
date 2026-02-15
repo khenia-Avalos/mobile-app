@@ -9,15 +9,14 @@ import {
   FlatList,
   TextInput,
   Modal,
-  ScrollView,
   Alert,
-  RefreshControl
+  RefreshControl,
+  ScrollView
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useClinic } from '../../contexts/ClinicContext';
 import { useAuth } from '../../hooks/useAuth';
 import { Calendar, DateData } from 'react-native-calendars';
-import axios from '../../api/axios-mobile';
 
 // Tipos
 interface Appointment {
@@ -27,7 +26,7 @@ interface Appointment {
   appointmentDate: string;
   startTime: string;
   endTime: string;
-  status: 'scheduled' | 'confirmed' | 'in-progress' | 'completed' | 'cancelled' | 'no-show';
+  status: 'scheduled' | 'confirmed' | 'in-progress' | 'completed' | 'cancelled' | 'no-show' | 'rescheduled';
   type: string;
   pet?: {
     _id: string;
@@ -49,12 +48,13 @@ interface Appointment {
 
 // Colores para estados
 const statusColors = {
-  'scheduled': '#3b82f6',
-  'confirmed': '#10b981',
-  'in-progress': '#f59e0b',
-  'completed': '#6b7280',
-  'cancelled': '#ef4444',
-  'no-show': '#8b5cf6'
+  'scheduled': '#3b82f6',      // Azul - Programada
+  'confirmed': '#10b981',      // Verde - Confirmada
+  'in-progress': '#f59e0b',    // Naranja - En Progreso
+  'completed': '#6b7280',      // Gris - Completada
+  'cancelled': '#ef4444',       // Rojo - Cancelada
+  'no-show': '#8b5cf6',        // Púrpura - No Asistió
+  'rescheduled': '#f97316'      // Naranja quemado - Reprogramada
 };
 
 const statusLabels = {
@@ -63,13 +63,25 @@ const statusLabels = {
   'in-progress': 'En Progreso',
   'completed': 'Completada',
   'cancelled': 'Cancelada',
-  'no-show': 'No Asistió'
+  'no-show': 'No Asistió',
+  'rescheduled': 'Reprogramada'
+};
+
+// Función para formatear fecha correctamente en zona horaria de Costa Rica
+const formatDateCR = (dateString: string, options: Intl.DateTimeFormatOptions) => {
+  const [year, month, day] = dateString.split('-').map(Number);
+  // Crear fecha en zona horaria local de Costa Rica (UTC-6)
+  const date = new Date(Date.UTC(year, month - 1, day, 6, 0, 0)); // 6am UTC = 12am CR
+  return date.toLocaleDateString('es-CR', { 
+    timeZone: 'America/Costa_Rica',
+    ...options 
+  });
 };
 
 export default function AppointmentsScreen() {
   const navigation = useNavigation();
   const { user } = useAuth();
-  const { appointments, fetchAppointments, loading } = useClinic();
+  const { appointments, fetchAppointments, updateAppointment, deleteAppointment, loading } = useClinic();
   
   // Estados
   const [selectedDate, setSelectedDate] = useState<string>(
@@ -83,6 +95,11 @@ export default function AppointmentsScreen() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
+  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+  
+  // Estados para el modal de estados
+  const [statusModalVisible, setStatusModalVisible] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
 
   // Cargar citas iniciales
   useEffect(() => {
@@ -107,9 +124,10 @@ export default function AppointmentsScreen() {
     setRefreshing(false);
   };
 
-  // Filtrar citas por fecha
+  // Filtrar citas por fecha (usando la fecha en UTC para comparar correctamente)
   const filterAppointmentsByDate = (date: string) => {
     const filtered = appointments.filter(apt => {
+      // La fecha de la cita viene en UTC del backend, la convertimos a string YYYY-MM-DD
       const aptDate = new Date(apt.appointmentDate).toISOString().split('T')[0];
       return aptDate === date;
     });
@@ -129,7 +147,7 @@ export default function AppointmentsScreen() {
       if (!marks[date]) {
         marks[date] = {
           marked: true,
-          dotColor: getStatusColor(apt.status),
+          dotColor: statusColors[apt.status as keyof typeof statusColors] || '#6b7280',
           selected: date === selectedDate
         };
       } else if (date === selectedDate) {
@@ -166,7 +184,6 @@ export default function AppointmentsScreen() {
 
     setSearchLoading(true);
     try {
-      // Buscar en citas locales primero
       const term = searchTerm.toLowerCase();
       const results = appointments.filter(apt => {
         const ownerName = apt.owner ? 
@@ -189,33 +206,17 @@ export default function AppointmentsScreen() {
     }
   };
 
-  // Obtener color según estado
-  const getStatusColor = (status: string) => {
-    return statusColors[status as keyof typeof statusColors] || '#6b7280';
-  };
-
-  // Formatear fecha
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('es-ES', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
-    });
-  };
-
   // Ver detalles de cita
   const viewAppointmentDetails = (appointment: Appointment) => {
     Alert.alert(
       'Detalle de Cita',
       `${appointment.title}\n\n` +
-      `📅 ${new Date(appointment.appointmentDate).toLocaleDateString('es-ES')}\n` +
-      `⏰ ${appointment.startTime} - ${appointment.endTime}\n` +
-      `🐕 ${appointment.pet?.name || 'Sin mascota'} (${appointment.pet?.species || '?'})\n` +
-      `👤 ${appointment.owner?.firstName || ''} ${appointment.owner?.lastName || ''}\n` +
-      `👨‍⚕️ ${appointment.veterinarian?.username || ''}\n` +
-      `📝 ${appointment.description || 'Sin descripción'}`,
+      `Fecha: ${new Date(appointment.appointmentDate).toLocaleDateString('es-CR', { timeZone: 'America/Costa_Rica' })}\n` +
+      `Hora: ${appointment.startTime} - ${appointment.endTime}\n` +
+      `Mascota: ${appointment.pet?.name || 'Sin mascota'} (${appointment.pet?.species || '?'})\n` +
+      `Dueño: ${appointment.owner?.firstName || ''} ${appointment.owner?.lastName || ''}\n` +
+      `Veterinario: ${appointment.veterinarian?.username || ''}\n` +
+      `Descripción: ${appointment.description || 'Sin descripción'}`,
       [
         { text: 'Cerrar' },
         { 
@@ -226,43 +227,132 @@ export default function AppointmentsScreen() {
     );
   };
 
-  // Mostrar opciones de estado
+  // Mostrar modal de estados
   const showStatusOptions = (appointment: Appointment) => {
-    const options = [
-      { label: 'Confirmada', value: 'confirmed' },
-      { label: 'En Progreso', value: 'in-progress' },
-      { label: 'Completada', value: 'completed' },
-      { label: 'Cancelada', value: 'cancelled' },
-      { label: 'No Asistió', value: 'no-show' }
-    ];
-
-    Alert.alert(
-      'Cambiar Estado',
-      'Selecciona el nuevo estado:',
-      [
-        ...options.map(opt => ({
-          text: opt.label,
-          onPress: () => updateAppointmentStatus(appointment._id, opt.value)
-        })),
-        { text: 'Cancelar', style: 'cancel' }
-      ]
-    );
+    setSelectedAppointment(appointment);
+    setStatusModalVisible(true);
   };
 
-  // Actualizar estado (simulado - necesitarías implementar en contexto)
-  const updateAppointmentStatus = async (id: string, status: string) => {
-    Alert.alert('Éxito', `Cita marcada como ${statusLabels[status as keyof typeof statusLabels]}`);
-    // Aquí iría la llamada real a la API
+  // Manejar selección de estado
+  const handleStatusSelect = async (newStatus: string) => {
+    if (!selectedAppointment) return;
+    
+    setStatusModalVisible(false);
+    
+    if (newStatus === 'reschedule') {
+      handleReschedule(selectedAppointment);
+    } else {
+      await updateAppointmentStatus(selectedAppointment._id, newStatus);
+    }
+  };
+
+  // Actualizar estado
+  const updateAppointmentStatus = async (id: string, newStatus: string) => {
+    setUpdatingStatus(id);
+    try {
+      console.log(`Actualizando cita ${id} a estado: ${newStatus}`);
+      
+      const result = await updateAppointment(id, { status: newStatus });
+      
+      if (result.success) {
+        // Actualizar las listas locales
+        const updatedAppointments = appointments.map(apt => 
+          apt._id === id ? { ...apt, status: newStatus as any } : apt
+        );
+        
+        setFilteredAppointments(prev => 
+          prev.map(apt => apt._id === id ? { ...apt, status: newStatus as any } : apt)
+        );
+        
+        setSearchResults(prev => 
+          prev.map(apt => apt._id === id ? { ...apt, status: newStatus as any } : apt)
+        );
+        
+        updateMarkedDates();
+        
+        Alert.alert(
+          'Éxito',
+          `Cita marcada como ${statusLabels[newStatus as keyof typeof statusLabels]}`,
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert('Error', result.message || 'No se pudo actualizar el estado');
+      }
+    } catch (error: any) {
+      console.error('Error updating status:', error);
+      Alert.alert('Error', error.message || 'Error al actualizar el estado');
+    } finally {
+      setUpdatingStatus(null);
+    }
+  };
+
+  // Reprogramar (elimina y abre formulario)
+  const handleReschedule = (appointment: Appointment) => {
+    Alert.alert(
+      'Reprogramar Cita',
+      '¿Estás seguro de eliminar esta cita y crear una nueva?\n\n' +
+      'Se eliminará la cita actual y podrás agendar un nuevo horario.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Sí, reprogramar',
+          style: 'destructive',
+          onPress: async () => {
+            setUpdatingStatus(appointment._id);
+            try {
+              console.log(`Eliminando cita ${appointment._id} para reprogramar`);
+              
+              const deleteResult = await deleteAppointment(appointment._id);
+              
+              if (deleteResult.success) {
+                Alert.alert(
+                  'Cita eliminada',
+                  'Ahora puedes crear una nueva cita',
+                  [
+                    {
+                      text: 'OK',
+                      onPress: () => {
+                        navigation.navigate('AppointmentForm' as never, {
+                          petId: appointment.pet?._id,
+                          ownerId: appointment.owner?._id
+                        } as never);
+                      }
+                    }
+                  ]
+                );
+              } else {
+                Alert.alert('Error', deleteResult.message || 'No se pudo eliminar la cita');
+              }
+            } catch (error: any) {
+              console.error('Error rescheduling:', error);
+              Alert.alert('Error', error.message || 'Error al reprogramar la cita');
+            } finally {
+              setUpdatingStatus(null);
+            }
+          }
+        }
+      ]
+    );
   };
 
   // Renderizar tarjeta de cita
   const renderAppointmentCard = ({ item }: { item: Appointment }) => (
     <TouchableOpacity
-      style={styles.appointmentCard}
+      style={[
+        styles.appointmentCard,
+        { borderLeftColor: statusColors[item.status] || '#0891b2' }
+      ]}
       onPress={() => viewAppointmentDetails(item)}
+      disabled={updatingStatus === item._id}
     >
+      {updatingStatus === item._id && (
+        <View style={styles.updatingOverlay}>
+          <ActivityIndicator size="small" color="#ffffff" />
+        </View>
+      )}
+      
       <View style={styles.appointmentHeader}>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
+        <View style={[styles.statusBadge, { backgroundColor: statusColors[item.status] || '#6b7280' }]}>
           <Text style={styles.statusText}>
             {statusLabels[item.status as keyof typeof statusLabels] || item.status}
           </Text>
@@ -275,18 +365,38 @@ export default function AppointmentsScreen() {
       <View style={styles.appointmentDetails}>
         {item.pet && (
           <Text style={styles.detailText}>
-            🐕 {item.pet.name} ({item.pet.species})
+            Mascota: {item.pet.name} ({item.pet.species})
           </Text>
         )}
         {item.owner && (
           <Text style={styles.detailText}>
-            👤 {item.owner.firstName} {item.owner.lastName}
+            Dueño: {item.owner.firstName} {item.owner.lastName}
           </Text>
         )}
         {item.veterinarian && (
           <Text style={styles.detailText}>
-            👨‍⚕️ {item.veterinarian.username}
+            Veterinario: {item.veterinarian.username}
           </Text>
+        )}
+      </View>
+
+      <View style={styles.cardActions}>
+        <TouchableOpacity
+          style={[styles.changeStatusButton, { backgroundColor: statusColors[item.status] || '#6b7280' }]}
+          onPress={() => showStatusOptions(item)}
+          disabled={updatingStatus === item._id}
+        >
+          <Text style={styles.changeStatusText}>Cambiar Estado</Text>
+        </TouchableOpacity>
+
+        {item.status !== 'rescheduled' && (
+          <TouchableOpacity
+            style={styles.rescheduleButton}
+            onPress={() => handleReschedule(item)}
+            disabled={updatingStatus === item._id}
+          >
+            <Text style={styles.rescheduleButtonText}>Reprogramar</Text>
+          </TouchableOpacity>
         )}
       </View>
     </TouchableOpacity>
@@ -299,7 +409,11 @@ export default function AppointmentsScreen() {
         <View>
           <Text style={styles.title}>Citas</Text>
           <Text style={styles.subtitle}>
-            {formatDate(selectedDate)}
+            {formatDateCR(selectedDate, { 
+              weekday: 'long', 
+              day: 'numeric', 
+              month: 'long' 
+            })}
           </Text>
         </View>
         
@@ -354,7 +468,7 @@ export default function AppointmentsScreen() {
           <View style={styles.appointmentsContainer}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>
-                Citas del {new Date(selectedDate).toLocaleDateString('es-ES', { 
+                Citas del {formatDateCR(selectedDate, { 
                   day: 'numeric', 
                   month: 'long' 
                 })}
@@ -468,11 +582,16 @@ export default function AppointmentsScreen() {
                     >
                       <Text style={styles.searchResultTitle}>{item.title}</Text>
                       <Text style={styles.searchResultSubtitle}>
-                        {new Date(item.appointmentDate).toLocaleDateString()} {item.startTime} - {item.pet?.name}
+                        {new Date(item.appointmentDate).toLocaleDateString('es-CR', { timeZone: 'America/Costa_Rica' })} {item.startTime} - {item.pet?.name}
                       </Text>
                       <Text style={styles.searchResultOwner}>
                         {item.owner?.firstName} {item.owner?.lastName}
                       </Text>
+                      <View style={[styles.searchResultStatus, { backgroundColor: statusColors[item.status] }]}>
+                        <Text style={styles.searchResultStatusText}>
+                          {statusLabels[item.status as keyof typeof statusLabels]}
+                        </Text>
+                      </View>
                     </TouchableOpacity>
                   )}
                   keyExtractor={(item) => item._id}
@@ -480,6 +599,101 @@ export default function AppointmentsScreen() {
                 />
               </>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL DE ESTADOS - CON SCROLL PARA VER TODOS */}
+      <Modal
+        visible={statusModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setStatusModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Cambiar Estado</Text>
+              <TouchableOpacity onPress={() => setStatusModalVisible(false)}>
+                <Text style={styles.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {selectedAppointment && (
+              <View style={styles.currentStatusContainer}>
+                <Text style={styles.currentStatusLabel}>Estado actual:</Text>
+                <View style={[styles.currentStatusBadge, { backgroundColor: statusColors[selectedAppointment.status] }]}>
+                  <Text style={styles.currentStatusText}>
+                    {statusLabels[selectedAppointment.status]}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            <ScrollView style={styles.statusList}>
+              <TouchableOpacity
+                style={[styles.statusOption, { borderLeftColor: '#3b82f6' }]}
+                onPress={() => handleStatusSelect('scheduled')}
+              >
+                <Text style={styles.statusOptionText}>Programada</Text>
+                <Text style={styles.statusOptionBadge}>📅</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.statusOption, { borderLeftColor: '#10b981' }]}
+                onPress={() => handleStatusSelect('confirmed')}
+              >
+                <Text style={styles.statusOptionText}>Confirmada</Text>
+                <Text style={styles.statusOptionBadge}>✅</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.statusOption, { borderLeftColor: '#f59e0b' }]}
+                onPress={() => handleStatusSelect('in-progress')}
+              >
+                <Text style={styles.statusOptionText}>En Progreso</Text>
+                <Text style={styles.statusOptionBadge}>⚙️</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.statusOption, { borderLeftColor: '#6b7280' }]}
+                onPress={() => handleStatusSelect('completed')}
+              >
+                <Text style={styles.statusOptionText}>Completada</Text>
+                <Text style={styles.statusOptionBadge}>✔️</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.statusOption, { borderLeftColor: '#ef4444' }]}
+                onPress={() => handleStatusSelect('cancelled')}
+              >
+                <Text style={styles.statusOptionText}>Cancelada</Text>
+                <Text style={styles.statusOptionBadge}>❌</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.statusOption, { borderLeftColor: '#8b5cf6' }]}
+                onPress={() => handleStatusSelect('no-show')}
+              >
+                <Text style={styles.statusOptionText}>No Asistió</Text>
+                <Text style={styles.statusOptionBadge}>🚫</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.statusOption, { borderLeftColor: '#f97316', marginBottom: 20 }]}
+                onPress={() => handleStatusSelect('reschedule')}
+              >
+                <Text style={styles.statusOptionText}>Reprogramar (eliminar y crear nueva)</Text>
+                <Text style={styles.statusOptionBadge}>🔄</Text>
+              </TouchableOpacity>
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => setStatusModalVisible(false)}
+            >
+              <Text style={styles.cancelButtonText}>Cancelar</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -614,12 +828,24 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
     borderLeftWidth: 4,
-    borderLeftColor: '#0891b2',
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
+    position: 'relative',
+  },
+  updatingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
   },
   appointmentHeader: {
     flexDirection: 'row',
@@ -650,10 +876,43 @@ const styles = StyleSheet.create({
   },
   appointmentDetails: {
     gap: 4,
+    marginBottom: 12,
   },
   detailText: {
     fontSize: 14,
     color: '#475569',
+  },
+  cardActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  changeStatusButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    flex: 1,
+    marginRight: 8,
+    alignItems: 'center',
+  },
+  changeStatusText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  rescheduleButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    backgroundColor: '#f97316',
+    flex: 1,
+    alignItems: 'center',
+  },
+  rescheduleButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
   },
   modalContainer: {
     flex: 1,
@@ -664,8 +923,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '90%',
-    minHeight: '50%',
+    maxHeight: '80%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -725,6 +983,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderWidth: 1,
     borderColor: '#e2e8f0',
+    position: 'relative',
   },
   searchResultTitle: {
     fontSize: 16,
@@ -740,5 +999,75 @@ const styles = StyleSheet.create({
   searchResultOwner: {
     fontSize: 13,
     color: '#0891b2',
+    marginBottom: 4,
+  },
+  searchResultStatus: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  searchResultStatusText: {
+    color: 'white',
+    fontSize: 8,
+    fontWeight: '600',
+  },
+  // Estilos para el modal de estados
+  currentStatusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  currentStatusLabel: {
+    fontSize: 14,
+    color: '#64748b',
+    marginRight: 8,
+  },
+  currentStatusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  currentStatusText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  statusList: {
+    padding: 16,
+  },
+  statusOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    marginBottom: 8,
+    borderLeftWidth: 4,
+  },
+  statusOptionText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#0f172a',
+  },
+  statusOptionBadge: {
+    fontSize: 20,
+  },
+  cancelButton: {
+    backgroundColor: '#f1f5f9',
+    padding: 16,
+    margin: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    color: '#64748b',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
