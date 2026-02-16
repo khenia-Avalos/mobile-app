@@ -18,25 +18,62 @@ import axios from '../../api/axios-mobile';
 export default function DoctorDashboardScreen() {
   const navigation = useNavigation();
   const { user, logout } = useAuth();
-  const { appointments, fetchAppointments, loading } = useClinic();
+  const { 
+    appointments, 
+    fetchAppointments,
+    owners,
+    pets,
+    fetchOwners,
+    fetchPets
+  } = useClinic();
   
   const [refreshing, setRefreshing] = useState(false);
   const [todayAppointments, setTodayAppointments] = useState<any[]>([]);
-  const [todaysDate, setTodaysDate] = useState('');
+  const [stats, setStats] = useState({
+    total: 0,
+    pending: 0,
+    inProgress: 0,
+    completed: 0
+  });
 
   useEffect(() => {
     loadDashboardData();
-    
-    // Establecer fecha actual formateada
-  
   }, []);
 
-  const loadDashboardData = async () => {
+  useEffect(() => {
+    // Actualizar citas de hoy cuando cambien las citas
     const today = new Date().toISOString().split('T')[0];
-    await fetchAppointments({ 
-      date: today,
-      veterinarian: user?.id 
+    const doctorAppointments = appointments.filter(apt => 
+      apt.appointmentDate?.split('T')[0] === today &&
+      apt.veterinarian?._id === user?.id
+    );
+    setTodayAppointments(doctorAppointments);
+
+    // Actualizar estadísticas
+    setStats({
+      total: doctorAppointments.length,
+      pending: doctorAppointments.filter(a => a.status === 'scheduled' || a.status === 'confirmed').length,
+      inProgress: doctorAppointments.filter(a => a.status === 'in-progress').length,
+      completed: doctorAppointments.filter(a => a.status === 'completed').length
     });
+  }, [appointments, user]);
+
+  const loadDashboardData = async () => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      
+      // Cargar todos los datos necesarios
+      await Promise.all([
+        fetchOwners(),
+        fetchPets(),
+        fetchAppointments({ 
+          date: today,
+          veterinarian: user?.id 
+        })
+      ]);
+    } catch (error) {
+      console.error('Error loading dashboard:', error);
+    }
   };
 
   const onRefresh = async () => {
@@ -44,16 +81,6 @@ export default function DoctorDashboardScreen() {
     await loadDashboardData();
     setRefreshing(false);
   };
-
-  // Filtrar citas del día para este doctor
-  useEffect(() => {
-    const today = new Date().toISOString().split('T')[0];
-    const doctorAppointments = appointments.filter(apt => 
-      apt.appointmentDate?.split('T')[0] === today &&
-      apt.veterinarian?._id === user?.id
-    );
-    setTodayAppointments(doctorAppointments);
-  }, [appointments, user]);
 
   const handleLogout = async () => {
     Alert.alert(
@@ -76,7 +103,7 @@ export default function DoctorDashboardScreen() {
     try {
       await axios.patch(`/appointments/${appointmentId}/status`, { status });
       Alert.alert('✅ Éxito', 'Estado actualizado');
-      loadDashboardData(); // Recargar datos
+      await loadDashboardData(); // Recargar datos
     } catch (error) {
       Alert.alert('❌ Error', 'No se pudo actualizar el estado');
     }
@@ -90,11 +117,11 @@ export default function DoctorDashboardScreen() {
           'Detalles de la Cita',
           `📅 ${new Date(item.appointmentDate).toLocaleDateString('es-ES')}\n` +
           `⏰ ${item.startTime} - ${item.endTime}\n` +
-          `🐾 Paciente: ${item.pet?.name}\n` +
-          `👤 Dueño: ${item.owner?.firstName} ${item.owner?.lastName}\n` +
-          `📞 Teléfono: ${item.owner?.phone}\n` +
+          `🐾 Paciente: ${item.pet?.name || 'No especificado'}\n` +
+          `👤 Dueño: ${item.owner?.firstName || ''} ${item.owner?.lastName || ''}\n` +
+          `📞 Teléfono: ${item.owner?.phone || 'No registrado'}\n` +
           `📝 Motivo: ${item.title}\n` +
-          `🏷️ Tipo: ${item.type}`,
+          `🏷️ Tipo: ${item.type || 'No especificado'}`,
           [
             { text: 'Cerrar', style: 'cancel' },
             { 
@@ -129,10 +156,12 @@ export default function DoctorDashboardScreen() {
       
       <View style={styles.appointmentDetails}>
         <Text style={styles.patientInfo}>
-          🐾 {item.pet?.name} ({item.pet?.species})
+          🐾 {item.pet?.name || 'Mascota no especificada'} 
+          {item.pet?.species ? ` (${item.pet.species})` : ''}
         </Text>
         <Text style={styles.ownerInfo}>
-          👤 {item.owner?.firstName} {item.owner?.lastName}
+          👤 {item.owner?.firstName || ''} {item.owner?.lastName || ''}
+          {item.owner?.phone ? ` - 📞 ${item.owner.phone}` : ''}
         </Text>
         {item.pet?.specialConditions && (
           <Text style={styles.specialConditions}>
@@ -152,11 +181,18 @@ export default function DoctorDashboardScreen() {
     >
       <View style={styles.header}>
         <View>
-          <Text style={styles.welcome}>
-            Hola, Dr. {user?.username} 
-          </Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Profile' as never)}>
+            <Text style={styles.welcome}>
+              Hola, Dr. {user?.username} 
+            </Text>
+          </TouchableOpacity>
           <Text style={styles.subtitle}>
-            {todaysDate}
+            {new Date().toLocaleDateString('es-ES', { 
+              weekday: 'long', 
+              day: 'numeric', 
+              month: 'long',
+              year: 'numeric'
+            })}
           </Text>
         </View>
         <TouchableOpacity 
@@ -171,28 +207,40 @@ export default function DoctorDashboardScreen() {
         <Text style={styles.statsTitle}>Resumen del Día</Text>
         <View style={styles.statsGrid}>
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{todayAppointments.length}</Text>
+            <Text style={styles.statNumber}>{stats.total}</Text>
             <Text style={styles.statLabel}>Total Citas</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>
-              {todayAppointments.filter(a => a.status === 'scheduled' || a.status === 'confirmed').length}
-            </Text>
+            <Text style={styles.statNumber}>{stats.pending}</Text>
             <Text style={styles.statLabel}>Pendientes</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>
-              {todayAppointments.filter(a => a.status === 'in-progress').length}
-            </Text>
+            <Text style={styles.statNumber}>{stats.inProgress}</Text>
             <Text style={styles.statLabel}>En Progreso</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>
-              {todayAppointments.filter(a => a.status === 'completed').length}
-            </Text>
+            <Text style={styles.statNumber}>{stats.completed}</Text>
             <Text style={styles.statLabel}>Completadas</Text>
           </View>
         </View>
+      </View>
+      
+      <View style={styles.statsContainer}>
+        <TouchableOpacity 
+          style={styles.statCard}
+          onPress={() => navigation.navigate('Owners' as never)}
+        >
+          <Text style={styles.statNumber}>{owners.length}</Text>
+          <Text style={styles.statLabel}>Clientes</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={styles.statCard}
+          onPress={() => navigation.navigate('Patients' as never)}
+        >
+          <Text style={styles.statNumber}>{pets.length}</Text>
+          <Text style={styles.statLabel}>Pacientes</Text>
+        </TouchableOpacity>
       </View>
       
       <View style={styles.appointmentsSection}>
@@ -202,7 +250,13 @@ export default function DoctorDashboardScreen() {
         
         {todayAppointments.length === 0 ? (
           <View style={styles.emptyContainer}>
-         
+            <Text style={styles.emptyText}>No hay citas programadas para hoy</Text>
+            <TouchableOpacity 
+              style={styles.emptyButton}
+              onPress={() => navigation.navigate('AppointmentForm' as never)}
+            >
+              <Text style={styles.emptyButtonText}>Agendar Cita</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <FlatList
@@ -219,14 +273,27 @@ export default function DoctorDashboardScreen() {
         <View style={styles.actionsGrid}>
           <TouchableOpacity 
             style={styles.actionButton}
+            onPress={() => navigation.navigate('AppointmentForm' as never)}
+          >
+            <Text style={styles.actionIcon}>📅</Text>
+            <Text style={styles.actionText}>Nueva Cita</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.actionButton}
             onPress={() => navigation.navigate('Profile' as never)}
           >
             <Text style={styles.actionIcon}>👤</Text>
             <Text style={styles.actionText}>Mi Perfil</Text>
           </TouchableOpacity>
-         
           
-        
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => navigation.navigate('Appointments' as never)}
+          >
+            <Text style={styles.actionIcon}>📋</Text>
+            <Text style={styles.actionText}>Ver Todas</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </ScrollView>
@@ -279,6 +346,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#bbf7d0',
     marginTop: 4,
+    textTransform: 'capitalize',
   },
   logoutButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
@@ -324,20 +392,38 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     alignItems: 'center',
   },
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    marginTop: 8,
+  },
+  statCard: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 16,
+    width: '48%',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
   statNumber: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#0c4a6e',
+    color: '#0f172a',
   },
   statLabel: {
     fontSize: 12,
-    color: '#0284c7',
+    color: '#64748b',
     marginTop: 4,
   },
   appointmentsSection: {
     backgroundColor: 'white',
     marginHorizontal: 16,
-    marginTop: 8,
+    marginTop: 16,
     borderRadius: 16,
     padding: 20,
   },
@@ -411,11 +497,18 @@ const styles = StyleSheet.create({
   emptyText: {
     color: '#94a3b8',
     fontSize: 16,
-    marginBottom: 8,
+    marginBottom: 12,
   },
-  emptySubtext: {
-    color: '#cbd5e1',
+  emptyButton: {
+    backgroundColor: '#0891b2',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  emptyButtonText: {
+    color: 'white',
     fontSize: 14,
+    fontWeight: '500',
   },
   quickActions: {
     backgroundColor: 'white',
