@@ -158,13 +158,7 @@ export default function ResetPasswordScreen() {
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.linkButton}
-          onPress={() => navigation.navigate('Login')}
-          disabled={loading}
-        >
-          <Text style={styles.linkText}>← Volver al Login</Text>
-        </TouchableOpacity>
+       
       </View>
     </View>
   );

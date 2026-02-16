@@ -1,5 +1,5 @@
 // mobile-app/src/screens/Clinic/OwnersScreen.tsx
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   View, 
   Text, 
@@ -7,7 +7,8 @@ import {
   FlatList, 
   TouchableOpacity, 
   RefreshControl,
-  Alert 
+  Alert,
+  TextInput
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useClinic } from '../../contexts/ClinicContext';
@@ -20,10 +21,37 @@ export default function OwnersScreen() {
     deleteOwner,
     loading 
   } = useClinic();
+  
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredOwners, setFilteredOwners] = useState<any[]>([]);
 
   useEffect(() => {
     fetchOwners();
   }, []);
+
+  useEffect(() => {
+    filterOwners();
+  }, [owners, searchQuery]);
+
+  const filterOwners = () => {
+    if (!searchQuery.trim()) {
+      setFilteredOwners(owners);
+      return;
+    }
+
+    const query = searchQuery.toLowerCase();
+    const filtered = owners.filter(owner => {
+      const fullName = `${owner.firstName} ${owner.lastName}`.toLowerCase();
+      const email = owner.email?.toLowerCase() || '';
+      const phone = owner.phone?.toLowerCase() || '';
+      
+      return fullName.includes(query) || 
+             email.includes(query) || 
+             phone.includes(query);
+    });
+    
+    setFilteredOwners(filtered);
+  };
 
   const handleDelete = (ownerId: string, ownerName: string) => {
     Alert.alert(
@@ -40,20 +68,19 @@ export default function OwnersScreen() {
               
               if (result.success) {
                 Alert.alert(' Éxito', 'Cliente eliminado correctamente');
-                // NO llamar a fetchOwners() - el estado ya se actualizó en el context
               } else {
                 if (result.message.includes('mascotas activas')) {
                   Alert.alert(
-                    '❌ No se puede eliminar', 
+                    'No se puede eliminar', 
                     'Este cliente tiene mascotas activas. Debes archivar o transferir las mascotas primero.'
                   );
                 } else {
-                  Alert.alert('❌ Error', result.message);
+                  Alert.alert(' Error', result.message);
                 }
               }
             } catch (error) {
               console.error('Error eliminando cliente:', error);
-              Alert.alert('❌ Error', 'Ocurrió un error al eliminar el cliente');
+              Alert.alert(' Error', 'Ocurrió un error al eliminar el cliente');
             }
           }
         },
@@ -71,10 +98,10 @@ export default function OwnersScreen() {
           {item.firstName} {item.lastName}
         </Text>
         <Text style={styles.ownerContact}>
-           {item.phone} •  {item.email}
+           {item.phone || 'Sin teléfono'} •  {item.email || 'Sin email'}
         </Text>
         <Text style={styles.ownerPets}>
-          {item.petCount || 0} mascotas
+           {item.petCount || 0} {item.petCount === 1 ? 'mascota' : 'mascotas'}
         </Text>
       </View>
       <View style={styles.ownerActions}>
@@ -98,16 +125,30 @@ export default function OwnersScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Clientes</Text>
-        <TouchableOpacity 
-          style={styles.addButton}
-          onPress={() => navigation.navigate('OwnerForm' as never)}
-        >
-          <Text style={styles.addButtonText}>+ Nuevo</Text>
-        </TouchableOpacity>
+      
+      </View>
+
+      {/* Buscador */}
+      <View style={styles.searchContainer}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder=" Buscar por nombre, email o teléfono..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholderTextColor="#94a3b8"
+        />
+        {searchQuery !== '' && (
+          <TouchableOpacity
+            style={styles.clearButton}
+            onPress={() => setSearchQuery('')}
+          >
+            <Text style={styles.clearButtonText}>✕</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <FlatList
-        data={owners}
+        data={filteredOwners}
         renderItem={renderOwner}
         keyExtractor={(item) => item._id}
         refreshControl={
@@ -118,13 +159,30 @@ export default function OwnersScreen() {
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No hay clientes registrados</Text>
-            <TouchableOpacity 
-              style={styles.emptyButton}
-              onPress={() => navigation.navigate('OwnerForm' as never)}
-            >
-              <Text style={styles.emptyButtonText}>Agregar primer cliente</Text>
-            </TouchableOpacity>
+            <Text style={styles.emptyEmoji}>👥</Text>
+            <Text style={styles.emptyTitle}>
+              {searchQuery ? 'No se encontraron resultados' : 'No hay clientes registrados'}
+            </Text>
+            <Text style={styles.emptyText}>
+              {searchQuery 
+                ? 'Prueba con otro término de búsqueda' 
+                : 'Agrega tu primer cliente desde el botón "+ Nuevo"'}
+            </Text>
+            {searchQuery ? (
+              <TouchableOpacity 
+                style={styles.clearSearchButton}
+                onPress={() => setSearchQuery('')}
+              >
+                <Text style={styles.clearSearchButtonText}>Limpiar búsqueda</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity 
+                style={styles.emptyButton}
+                onPress={() => navigation.navigate('OwnerForm' as never)}
+              >
+                <Text style={styles.emptyButtonText}>Agregar primer cliente</Text>
+              </TouchableOpacity>
+            )}
           </View>
         }
       />
@@ -160,6 +218,40 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: '600',
   },
+  searchContainer: {
+    padding: 16,
+    position: 'relative',
+  },
+  searchInput: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 14,
+    paddingRight: 50,
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  clearButton: {
+    position: 'absolute',
+    right: 28,
+    top: 28,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#e2e8f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  clearButtonText: {
+    fontSize: 14,
+    color: '#64748b',
+    fontWeight: '600',
+  },
   ownerCard: {
     backgroundColor: 'white',
     marginHorizontal: 16,
@@ -185,7 +277,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   ownerContact: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#64748b',
     marginBottom: 4,
   },
@@ -198,7 +290,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   editButton: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: '#0891b2',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
@@ -206,6 +298,7 @@ const styles = StyleSheet.create({
   editButtonText: {
     color: 'white',
     fontSize: 12,
+    fontWeight: '600',
   },
   deleteButton: {
     backgroundColor: '#ef4444',
@@ -216,15 +309,28 @@ const styles = StyleSheet.create({
   deleteButtonText: {
     color: 'white',
     fontSize: 12,
+    fontWeight: '600',
   },
   emptyContainer: {
     alignItems: 'center',
+    justifyContent: 'center',
     padding: 40,
   },
-  emptyText: {
-    fontSize: 16,
-    color: '#94a3b8',
+  emptyEmoji: {
+    fontSize: 60,
     marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#0f172a',
+    marginBottom: 8,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'center',
+    marginBottom: 20,
   },
   emptyButton: {
     backgroundColor: '#0891b2',
@@ -234,6 +340,16 @@ const styles = StyleSheet.create({
   },
   emptyButtonText: {
     color: 'white',
+    fontWeight: '600',
+  },
+  clearSearchButton: {
+    backgroundColor: '#e2e8f0',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  clearSearchButtonText: {
+    color: '#64748b',
     fontWeight: '600',
   },
 });

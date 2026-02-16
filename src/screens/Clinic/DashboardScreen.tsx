@@ -29,6 +29,19 @@ export default function DashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [todayAppointments, setTodayAppointments] = useState<any[]>([]);
   const [staffCount, setStaffCount] = useState(0);
+
+  // ✅ Función para obtener la fecha actual en Costa Rica (YYYY-MM-DD)
+  const getCurrentDateCR = () => {
+    const date = new Date();
+    const options: Intl.DateTimeFormatOptions = { 
+      timeZone: 'America/Costa_Rica',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    };
+    const crDateStr = date.toLocaleDateString('en-CA', options);
+    return crDateStr;
+  };
   
   useEffect(() => {
     loadData();
@@ -36,20 +49,19 @@ export default function DashboardScreen() {
   }, []);
   
   const loadData = async () => {
-    const today = new Date().toISOString().split('T')[0];
-    console.log('📅 Cargando citas para hoy:', today);
+    const todayCR = getCurrentDateCR();
+    console.log('📅 Cargando citas para hoy (Costa Rica):', todayCR);
     
     await Promise.all([
       fetchOwners(),
       fetchPets(),
-      fetchAppointments({ date: today })
+      fetchAppointments({ date: todayCR })
     ]);
   };
   
   const fetchStaffCount = async () => {
     try {
       // Aquí deberías obtener el conteo real del personal desde tu API
-      // Por ahora simulamos con un número fijo
       setStaffCount(8);
     } catch (error) {
       console.error('Error fetching staff count:', error);
@@ -63,20 +75,20 @@ export default function DashboardScreen() {
     setRefreshing(false);
   };
   
-  // Filtrar citas de hoy por fecha y status
+  // ✅ Filtrar citas de hoy por fecha SOLAMENTE (sin filtrar por estado)
   useEffect(() => {
-    const today = new Date().toISOString().split('T')[0];
+    const todayCR = getCurrentDateCR();
     
     const todayApts = appointments.filter(apt => {
       const aptDate = apt.appointmentDate ? new Date(apt.appointmentDate).toISOString().split('T')[0] : null;
-      return aptDate === today && 
-             (apt.status === 'scheduled' || apt.status === 'confirmed');
+      // SOLO filtrar por fecha, mantener TODOS los estados
+      return aptDate === todayCR;
     });
     
-    console.log(`📊 Citas filtradas para hoy: ${todayApts.length} de ${appointments.length} totales`);
+    console.log(`📊 Citas para hoy (todos los estados): ${todayApts.length} de ${appointments.length} totales`);
     setTodayAppointments(todayApts);
   }, [appointments]);
-  
+
   const handleLogout = async () => {
     Alert.alert(
       'Cerrar Sesión',
@@ -106,15 +118,21 @@ export default function DashboardScreen() {
     }
   };
 
-  // ✅ Navegar a la lista de pacientes (nueva pantalla Patients)
   const navigateToPatients = () => {
     navigation.navigate('Patients' as never);
   };
 
-  // ✅ Navegar a la lista de personal
-const navigateToStaff = () => {
-  navigation.navigate('Staff' as never);
-};
+  const navigateToStaff = () => {
+    navigation.navigate('Staff' as never);
+  };
+
+  // Calcular estadísticas del día (TODOS los estados)
+  const totalToday = todayAppointments.length;
+  const scheduledCount = todayAppointments.filter(a => a.status === 'scheduled' || a.status === 'confirmed').length;
+  const inProgressCount = todayAppointments.filter(a => a.status === 'in-progress').length;
+  const completedCount = todayAppointments.filter(a => a.status === 'completed').length;
+  const cancelledCount = todayAppointments.filter(a => a.status === 'cancelled' || a.status === 'no-show').length;
+
   return (
     <ScrollView 
       style={styles.container}
@@ -134,7 +152,8 @@ const navigateToStaff = () => {
               weekday: 'long', 
               day: 'numeric', 
               month: 'long',
-              year: 'numeric'
+              year: 'numeric',
+              timeZone: 'America/Costa_Rica'
             })}
           </Text>
         </View>
@@ -174,6 +193,8 @@ const navigateToStaff = () => {
           <Text style={styles.statLabel}>Personal</Text>
         </TouchableOpacity>
       </View>
+
+ 
       
       <View style={styles.quickActions}>
         <View style={styles.sectionHeader}>
@@ -188,7 +209,6 @@ const navigateToStaff = () => {
             <Text style={styles.actionIcon}>👤</Text>
             <Text style={styles.actionText}>Nuevo Cliente</Text>
           </TouchableOpacity>
-          
           
           <TouchableOpacity 
             style={styles.actionButton}
@@ -227,10 +247,10 @@ const navigateToStaff = () => {
         </View>
       </View>
       
-      {/* Citas de hoy */}
+      {/* Citas de hoy - MUESTRA TODOS LOS ESTADOS */}
       <View style={styles.todaySection}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Citas para hoy</Text>
+          <Text style={styles.sectionTitle}>Citas para hoy ({totalToday})</Text>
           <TouchableOpacity onPress={() => navigation.navigate('Appointments' as never)}>
             <Text style={styles.seeAll}>Ver todas</Text>
           </TouchableOpacity>
@@ -247,7 +267,7 @@ const navigateToStaff = () => {
             </TouchableOpacity>
           </View>
         ) : (
-          todayAppointments.map((apt) => (
+          todayAppointments.slice(0, 5).map((apt) => (
             <TouchableOpacity 
               key={apt._id}
               style={styles.appointmentCard}
@@ -255,12 +275,12 @@ const navigateToStaff = () => {
                 Alert.alert(
                   'Detalle de Cita',
                   `${apt.title}\n\n` +
-                  `📅 ${new Date(apt.appointmentDate).toLocaleDateString('es-ES')}\n` +
-                  `⏰ ${apt.startTime} - ${apt.endTime}\n` +
-                  `🐕 ${apt.pet?.name || 'Sin mascota'} (${apt.pet?.species || ''})\n` +
-                  `👤 ${apt.owner?.firstName || ''} ${apt.owner?.lastName || ''}\n` +
-                  `👨‍⚕️ ${apt.veterinarian?.username || ''}\n` +
-                  `📝 ${apt.description || 'Sin descripción'}`,
+                  ` ${new Date(apt.appointmentDate).toLocaleDateString('es-ES', { timeZone: 'America/Costa_Rica' })}\n` +
+                  ` ${apt.startTime} - ${apt.endTime}\n` +
+                  ` ${apt.pet?.name || 'Sin mascota'} (${apt.pet?.species || ''})\n` +
+                  ` ${apt.owner?.firstName || ''} ${apt.owner?.lastName || ''}\n` +
+                  ` ${apt.veterinarian?.username || ''}\n` +
+                  ` ${apt.description || 'Sin descripción'}`,
                   [{ text: 'OK' }]
                 );
               }}
@@ -272,17 +292,17 @@ const navigateToStaff = () => {
                 <Text style={styles.aptTitle}>{apt.title}</Text>
                 {apt.pet && (
                   <Text style={styles.aptPet}>
-                    🐕 {apt.pet.name} ({apt.pet.species})
+                     {apt.pet.name} ({apt.pet.species})
                   </Text>
                 )}
                 {apt.owner && (
                   <Text style={styles.aptOwner}>
-                    👤 {apt.owner.firstName} {apt.owner.lastName}
+                     {apt.owner.firstName} {apt.owner.lastName}
                   </Text>
                 )}
                 {apt.veterinarian && (
                   <Text style={styles.aptVet}>
-                    👨‍⚕️ {apt.veterinarian.username}
+                     {apt.veterinarian.username}
                   </Text>
                 )}
               </View>
@@ -296,6 +316,14 @@ const navigateToStaff = () => {
               </View>
             </TouchableOpacity>
           ))
+        )}
+        {todayAppointments.length > 5 && (
+          <TouchableOpacity 
+            style={styles.viewMoreButton}
+            onPress={() => navigation.navigate('Appointments' as never)}
+          >
+            <Text style={styles.viewMoreText}>Ver {todayAppointments.length - 5} citas más...</Text>
+          </TouchableOpacity>
         )}
       </View>
     </ScrollView>
@@ -337,7 +365,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     paddingTop: 40,
-    backgroundColor: '#16adbb',
+    backgroundColor: '#219eb4',
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
   },
@@ -397,6 +425,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#64748b',
     marginTop: 4,
+  },
+  todayStatsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  todayStatItem: {
+    backgroundColor: '#f0f9ff',
+    borderRadius: 12,
+    padding: 12,
+    width: '22%',
+    alignItems: 'center',
+  },
+  todayStatNumber: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#0c4a6e',
+  },
+  todayStatLabel: {
+    fontSize: 10,
+    color: '#0284c7',
+    marginTop: 2,
   },
   quickActions: {
     padding: 16,
@@ -530,6 +581,15 @@ const styles = StyleSheet.create({
   statusText: {
     color: 'white',
     fontSize: 10,
+    fontWeight: '600',
+  },
+  viewMoreButton: {
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  viewMoreText: {
+    color: '#0891b2',
+    fontSize: 14,
     fontWeight: '600',
   },
 });

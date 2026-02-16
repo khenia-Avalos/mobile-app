@@ -22,7 +22,7 @@ export default function ForgotPasswordScreen() {
       await forgotPasswordRequest(email);
       Alert.alert(
         'Email Enviado',
-        'Si el email existe, recibirás instrucciones para resetear tu contraseña',
+        'Si el email existe, recibirás instrucciones para resetear tu contraseña recuerda revisar también la carpeta de spam',
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
     } catch (error: any) {
@@ -36,7 +36,7 @@ export default function ForgotPasswordScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>Recuperar Contraseña</Text>
       <Text style={styles.subtitle}>
-        Ingresa tu email y te enviaremos un enlace para resetear tu contraseña
+        Ingresa tu email y te enviaremos un enlace para resetear tu contraseña 
       </Text>
 
       <View style={styles.form}>
@@ -60,12 +60,7 @@ export default function ForgotPasswordScreen() {
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.linkButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.linkText}>← Volver al Login</Text>
-        </TouchableOpacity>
+       
       </View>
     </View>
   );

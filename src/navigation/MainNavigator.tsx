@@ -24,6 +24,7 @@ import StaffScreen from '../screens/Clinic/StaffScreen';
 
 // PANTALLAS AUTENTICADAS (DOCTOR)
 import DoctorDashboardScreen from '../screens/Clinic/DoctorDashboardScreen';
+import DoctorAppointmentsScreen from '../screens/Clinic/DoctorAppointmentsScreen';
 
 // PANTALLAS AUTENTICADAS (RECEPCIÓN)
 import ReceptionDashboardScreen from '../screens/Clinic/ReceptionDashboardScreen';
@@ -68,6 +69,7 @@ export default function MainNavigator() {
       ) : (
         // USUARIO AUTENTICADO - REDIRECCIÓN POR ROL
         user.role === 'admin' ? (
+          // ADMIN
           <>
             <Stack.Screen name="Dashboard" component={DashboardScreen} />
             <Stack.Screen name="Register" component={RegisterScreen} />
@@ -82,18 +84,21 @@ export default function MainNavigator() {
             <Stack.Screen name="Profile" component={ProfileScreen} />
             <Stack.Screen name="Patients" component={PatientsScreen} />
             <Stack.Screen name="Staff" component={StaffScreen} />
-            {/* ✅ Agregar ForgotPassword también en autenticado */}
             <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
             <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
           </>
         ) : user.role === 'veterinarian' ? (
+          // VETERINARIO
           <>
             <Stack.Screen name="DoctorDashboard" component={DoctorDashboardScreen} />
+            <Stack.Screen name="DoctorAppointments" component={DoctorAppointmentsScreen} />
+            <Stack.Screen name="AppointmentForm" component={AppointmentFormScreen} />
             <Stack.Screen name="Profile" component={ProfileScreen} />
             <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
             <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
           </>
         ) : user.role === 'assistant' ? (
+          // ASISTENTE
           <>
             <Stack.Screen name="ReceptionDashboard" component={ReceptionDashboardScreen} />
             <Stack.Screen name="Owners" component={OwnersScreen} />
@@ -106,6 +111,7 @@ export default function MainNavigator() {
             <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
           </>
         ) : (
+          // OTROS ROLES (fallback)
           <>
             <Stack.Screen name="Home" component={HomeScreen} />
             <Stack.Screen name="Profile" component={ProfileScreen} />

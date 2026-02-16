@@ -29,7 +29,7 @@ export default function OwnerFormScreen() {
     firstName: '',
     lastName: '',
     email: '',
-    phone: '',
+    phone: '+506 ', // Prefijo de Costa Rica por defecto
     address: '',
     dni: '',
     emergencyContact: {
@@ -61,7 +61,7 @@ export default function OwnerFormScreen() {
           firstName: owner.firstName || '',
           lastName: owner.lastName || '',
           email: owner.email || '',
-          phone: owner.phone || '',
+          phone: owner.phone || '+506 ', // Si no tiene, poner prefijo
           address: owner.address || '',
           dni: owner.dni || '',
           emergencyContact: owner.emergencyContact || {
@@ -75,6 +75,77 @@ export default function OwnerFormScreen() {
     } catch (error) {
       Alert.alert('Error', 'No se pudo cargar el cliente');
     }
+  };
+
+  // Función para validar formato de teléfono internacional
+  const validatePhone = (phone: string) => {
+    // Si está vacío o solo tiene el prefijo, no es válido
+    if (!phone || phone === '+' || phone === '+506 ' || phone === '+506') {
+      return false;
+    }
+    
+    // Regex para teléfono: +[código país][número] (ej: +50688888888)
+    // Eliminar espacios para la validación
+    const cleanPhone = phone.replace(/\s/g, '');
+    const phoneRegex = /^\+\d{7,15}$/;
+    return phoneRegex.test(cleanPhone);
+  };
+
+  // Función para formatear teléfono mientras se escribe (sin causar repetición)
+  const handlePhoneChange = (text: string) => {
+    // Si el usuario borra todo, mantener el prefijo
+    if (text === '') {
+      setFormData({...formData, phone: '+506 '});
+      return;
+    }
+
+    // Si no empieza con +, agregarlo
+    let cleaned = text;
+    if (!cleaned.startsWith('+')) {
+      cleaned = '+' + cleaned;
+    }
+
+    // Extraer el código de país (primeros dígitos después del +)
+    const plusIndex = cleaned.indexOf('+');
+    let countryCode = '506'; // código por defecto
+    let number = '';
+
+    if (plusIndex === 0) {
+      const parts = cleaned.substring(1).split(/\s+/);
+      if (parts.length > 0) {
+        // Si hay un código de país explícito (ej: +1, +506, +57)
+        const possibleCode = parts[0].replace(/\D/g, '');
+        if (possibleCode.length > 0) {
+          countryCode = possibleCode;
+          number = parts.slice(1).join('').replace(/\D/g, '');
+        } else {
+          // Si no hay código, usar el default y tomar el resto como número
+          number = parts.join('').replace(/\D/g, '');
+        }
+      }
+    }
+
+    // Limpiar el número (solo dígitos)
+    number = number.replace(/\D/g, '');
+
+    // Aplicar formato según la longitud
+    let formatted = `+${countryCode}`;
+    
+    if (number.length > 0) {
+      if (countryCode === '506') {
+        // Formato Costa Rica: +506 8888 8888
+        if (number.length <= 4) {
+          formatted += ' ' + number;
+        } else {
+          formatted += ' ' + number.substring(0, 4) + ' ' + number.substring(4, 8);
+        }
+      } else {
+        // Otros países: formato simple
+        formatted += ' ' + number.match(/.{1,4}/g)?.join(' ') || number;
+      }
+    }
+
+    setFormData({...formData, phone: formatted});
   };
 
   const validateForm = () => {
@@ -105,8 +176,9 @@ export default function OwnerFormScreen() {
       isValid = false;
     }
     
-    if (!formData.phone.trim()) {
-      errors.phone = 'El teléfono es requerido';
+    // Validar teléfono
+    if (!validatePhone(formData.phone)) {
+      errors.phone = 'El teléfono debe tener formato internacional: +50688888888';
       isValid = false;
     }
     
@@ -115,7 +187,7 @@ export default function OwnerFormScreen() {
   };
 
   const handleSubmit = async () => {
-    console.log(' Enviando formulario:', formData);
+    console.log('📝 Enviando formulario:', formData);
     
     if (!validateForm()) {
       Alert.alert('Error', 'Por favor completa los campos requeridos');
@@ -130,43 +202,26 @@ export default function OwnerFormScreen() {
         result = await createOwner(formData);
       }
       
-      console.log(' Resultado:', result);
+      console.log('✅ Resultado:', result);
       
       if (result.success) {
         Alert.alert(
-          ' Éxito',
+          '✅ Éxito',
           result.message || (isEditing ? 'Cliente actualizado' : 'Cliente creado'),
           [{ 
             text: 'OK', 
             onPress: () => {
-              // Navegar hacia atrás y luego refrescar
               navigation.goBack();
-              // Podrías agregar un callback aquí para refrescar la lista
             }
           }]
         );
       } else {
-        Alert.alert(' Error', result.message || 'Ocurrió un error al guardar');
+        Alert.alert('❌ Error', result.message || 'Ocurrió un error al guardar');
       }
     } catch (error) {
-      console.error(' Error en handleSubmit:', error);
-      Alert.alert(' Error', 'No se pudo guardar el cliente. Verifica tu conexión.');
+      console.error('❌ Error en handleSubmit:', error);
+      Alert.alert('❌ Error', 'No se pudo guardar el cliente. Verifica tu conexión.');
     }
-  };
-
-  const formatPhone = (text: string) => {
-    // Auto-formato para teléfono costarricense
-    let formatted = text.replace(/\D/g, '');
-    if (formatted.length > 0 && !formatted.startsWith('+')) {
-      formatted = '+506' + formatted;
-    }
-    if (formatted.length > 4) {
-      formatted = formatted.slice(0, 4) + ' ' + formatted.slice(4);
-    }
-    if (formatted.length > 9) {
-      formatted = formatted.slice(0, 9) + ' ' + formatted.slice(9);
-    }
-    return formatted;
   };
 
   return (
@@ -242,17 +297,14 @@ export default function OwnerFormScreen() {
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Teléfono *</Text>
+            <Text style={styles.hint}>
+              Formato: +[código país][número] (ej: +50688888888)
+            </Text>
             <TextInput
               style={[styles.input, formErrors.phone ? styles.inputError : null]}
               placeholder="+506 8888 8888"
               value={formData.phone}
-              onChangeText={(text) => {
-                const formatted = formatPhone(text);
-                setFormData({ ...formData, phone: formatted });
-                if (formErrors.phone) {
-                  setFormErrors({ ...formErrors, phone: '' });
-                }
-              }}
+              onChangeText={handlePhoneChange}
               keyboardType="phone-pad"
             />
             {formErrors.phone ? (
@@ -280,10 +332,6 @@ export default function OwnerFormScreen() {
             />
           </View>
         </View>
-
-       
-
-        
 
         {/* Notas */}
         <View style={styles.section}>
@@ -387,6 +435,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#374151',
     marginBottom: 8,
+  },
+  hint: {
+    fontSize: 12,
+    color: '#64748b',
+    marginBottom: 4,
   },
   input: {
     backgroundColor: '#f9fafb',

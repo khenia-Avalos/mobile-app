@@ -500,7 +500,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     paddingTop: 60,
-    backgroundColor: '#761b0f',
+    backgroundColor: '#219eb4',
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
   },

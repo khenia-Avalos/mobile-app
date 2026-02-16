@@ -178,9 +178,7 @@ export default function ProfileScreen() {
     }
   };
 
-  // ✅ FUNCIÓN CORREGIDA - SIEMPRE navega a ForgotPassword
   const handleChangePassword = () => {
-    // Si es admin editando otro usuario
     if (!isOwnProfile && user?.role === 'admin') {
       Alert.alert(
         'Cambiar Contraseña',
@@ -222,7 +220,7 @@ export default function ProfileScreen() {
 
   const getRoleColor = (role: string) => {
     switch(role) {
-      case 'admin': return '#ef4444';
+      case 'admin': return '#4469ef';
       case 'veterinarian': return '#0891b2';
       case 'assistant': return '#f59e0b';
       default: return '#6b7280';
@@ -278,7 +276,7 @@ export default function ProfileScreen() {
                 style={styles.editButton}
                 onPress={() => setIsEditing(true)}
               >
-                <Text style={styles.editButtonText}>✏️ Editar</Text>
+                <Text style={styles.editButtonText}> Editar</Text>
               </TouchableOpacity>
             )}
           </View>

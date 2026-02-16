@@ -18,62 +18,57 @@ import axios from '../../api/axios-mobile';
 export default function DoctorDashboardScreen() {
   const navigation = useNavigation();
   const { user, logout } = useAuth();
-  const { 
-    appointments, 
-    fetchAppointments,
-    owners,
-    pets,
-    fetchOwners,
-    fetchPets
-  } = useClinic();
+  const { appointments, fetchAppointments, loading } = useClinic();
   
   const [refreshing, setRefreshing] = useState(false);
   const [todayAppointments, setTodayAppointments] = useState<any[]>([]);
-  const [stats, setStats] = useState({
-    total: 0,
-    pending: 0,
-    inProgress: 0,
-    completed: 0
-  });
+  const [todaysDate, setTodaysDate] = useState('');
+
+  // ✅ Función CORREGIDA para obtener la fecha actual en Costa Rica (YYYY-MM-DD)
+  const getCurrentDateCR = () => {
+    const date = new Date();
+    // Opción 1: Usar toLocaleDateString con la zona horaria
+    const options: Intl.DateTimeFormatOptions = { 
+      timeZone: 'America/Costa_Rica',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    };
+    const crDateStr = date.toLocaleDateString('en-CA', options); // en-CA da formato YYYY-MM-DD
+    return crDateStr;
+  };
 
   useEffect(() => {
     loadDashboardData();
+    
+    const today = new Date();
+    const options: Intl.DateTimeFormatOptions = { 
+      weekday: 'long', 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric',
+      timeZone: 'America/Costa_Rica'
+    };
+    setTodaysDate(today.toLocaleDateString('es-ES', options));
   }, []);
 
-  useEffect(() => {
-    // Actualizar citas de hoy cuando cambien las citas
-    const today = new Date().toISOString().split('T')[0];
-    const doctorAppointments = appointments.filter(apt => 
-      apt.appointmentDate?.split('T')[0] === today &&
-      apt.veterinarian?._id === user?.id
-    );
-    setTodayAppointments(doctorAppointments);
-
-    // Actualizar estadísticas
-    setStats({
-      total: doctorAppointments.length,
-      pending: doctorAppointments.filter(a => a.status === 'scheduled' || a.status === 'confirmed').length,
-      inProgress: doctorAppointments.filter(a => a.status === 'in-progress').length,
-      completed: doctorAppointments.filter(a => a.status === 'completed').length
-    });
-  }, [appointments, user]);
-
   const loadDashboardData = async () => {
-    try {
-      const today = new Date().toISOString().split('T')[0];
-      
-      // Cargar todos los datos necesarios
-      await Promise.all([
-        fetchOwners(),
-        fetchPets(),
-        fetchAppointments({ 
-          date: today,
-          veterinarian: user?.id 
-        })
-      ]);
-    } catch (error) {
-      console.error('Error loading dashboard:', error);
+    const todayCR = getCurrentDateCR();
+    const vetId = user?._id || user?.id;
+    
+    console.log('📅 DoctorDashboard - Cargando citas:');
+    console.log('   👤 Usuario:', user?.username);
+    console.log('   🆔 ID del usuario:', vetId);
+    console.log('   📆 Fecha Costa Rica:', todayCR);
+    
+    if (todayCR === 'NaN-NaN-NaN' || !todayCR) {
+      console.log('❌ Error: Fecha inválida');
+      return;
     }
+    
+    await fetchAppointments({ 
+      date: todayCR
+    });
   };
 
   const onRefresh = async () => {
@@ -81,6 +76,44 @@ export default function DoctorDashboardScreen() {
     await loadDashboardData();
     setRefreshing(false);
   };
+
+  // Filtrar citas para asegurar que solo sean de hoy en Costa Rica
+  useEffect(() => {
+    if (!appointments.length) {
+      setTodayAppointments([]);
+      return;
+    }
+    
+    const todayCR = getCurrentDateCR();
+    const vetId = user?._id || user?.id;
+    
+    console.log('🔍 Verificando citas para hoy en Costa Rica:', todayCR);
+    console.log('   📊 Total citas recibidas:', appointments.length);
+    
+    // Filtrar SOLO las citas de hoy en Costa Rica
+    const filtered = appointments.filter(apt => {
+      // Obtener la fecha de la cita en formato YYYY-MM-DD (viene en UTC del backend)
+      let aptDateStr = '';
+      if (apt.appointmentDate) {
+        // Convertir la fecha UTC a string YYYY-MM-DD
+        const aptDate = new Date(apt.appointmentDate);
+        aptDateStr = aptDate.toISOString().split('T')[0];
+      }
+      
+      const isToday = aptDateStr === todayCR;
+      
+      if (isToday) {
+        console.log(`   ✅ Cita de HOY: ${apt.title} - ${apt.startTime} (${apt.status})`);
+      } else {
+        console.log(`   ❌ Cita de OTRO DÍA: ${aptDateStr} - ${apt.title}`);
+      }
+      
+      return isToday;
+    });
+    
+    console.log(`📊 Total citas para hoy: ${filtered.length}`);
+    setTodayAppointments(filtered);
+  }, [appointments, user]);
 
   const handleLogout = async () => {
     Alert.alert(
@@ -101,11 +134,14 @@ export default function DoctorDashboardScreen() {
 
   const handleUpdateAppointmentStatus = async (appointmentId: string, status: string) => {
     try {
-      await axios.patch(`/appointments/${appointmentId}/status`, { status });
+      console.log(`🔄 Actualizando cita ${appointmentId} a estado: ${status}`);
+      const response = await axios.patch(`/api/appointments/${appointmentId}/status`, { status });
+      console.log('✅ Respuesta:', response.data);
       Alert.alert('✅ Éxito', 'Estado actualizado');
-      await loadDashboardData(); // Recargar datos
-    } catch (error) {
-      Alert.alert('❌ Error', 'No se pudo actualizar el estado');
+      loadDashboardData();
+    } catch (error: any) {
+      console.error('❌ Error al actualizar estado:', error.response?.data || error);
+      Alert.alert('❌ Error', error.response?.data?.message || 'No se pudo actualizar el estado');
     }
   };
 
@@ -115,7 +151,7 @@ export default function DoctorDashboardScreen() {
       onPress={() => {
         Alert.alert(
           'Detalles de la Cita',
-          `📅 ${new Date(item.appointmentDate).toLocaleDateString('es-ES')}\n` +
+          `📅 ${new Date(item.appointmentDate).toLocaleDateString('es-ES', { timeZone: 'America/Costa_Rica' })}\n` +
           `⏰ ${item.startTime} - ${item.endTime}\n` +
           `🐾 Paciente: ${item.pet?.name || 'No especificado'}\n` +
           `👤 Dueño: ${item.owner?.firstName || ''} ${item.owner?.lastName || ''}\n` +
@@ -124,16 +160,16 @@ export default function DoctorDashboardScreen() {
           `🏷️ Tipo: ${item.type || 'No especificado'}`,
           [
             { text: 'Cerrar', style: 'cancel' },
-            { 
+            ...(item.status !== 'in-progress' ? [{ 
               text: 'Marcar como En Progreso', 
               onPress: () => handleUpdateAppointmentStatus(item._id, 'in-progress'),
-              style: 'default'
-            },
-            { 
+              style: 'default' as const
+            }] : []),
+            ...(item.status !== 'completed' ? [{ 
               text: 'Marcar como Completada', 
               onPress: () => handleUpdateAppointmentStatus(item._id, 'completed'),
-              style: 'default'
-            }
+              style: 'default' as const
+            }] : [])
           ]
         );
       }}
@@ -156,12 +192,10 @@ export default function DoctorDashboardScreen() {
       
       <View style={styles.appointmentDetails}>
         <Text style={styles.patientInfo}>
-          🐾 {item.pet?.name || 'Mascota no especificada'} 
-          {item.pet?.species ? ` (${item.pet.species})` : ''}
+          🐾 {item.pet?.name || 'Sin mascota'} ({item.pet?.species || '?'})
         </Text>
         <Text style={styles.ownerInfo}>
           👤 {item.owner?.firstName || ''} {item.owner?.lastName || ''}
-          {item.owner?.phone ? ` - 📞 ${item.owner.phone}` : ''}
         </Text>
         {item.pet?.specialConditions && (
           <Text style={styles.specialConditions}>
@@ -172,6 +206,17 @@ export default function DoctorDashboardScreen() {
     </TouchableOpacity>
   );
 
+  const totalAppointments = todayAppointments.length;
+  const pendingAppointments = todayAppointments.filter(a => 
+    a.status === 'scheduled' || a.status === 'confirmed'
+  ).length;
+  const inProgressAppointments = todayAppointments.filter(a => 
+    a.status === 'in-progress'
+  ).length;
+  const completedAppointments = todayAppointments.filter(a => 
+    a.status === 'completed'
+  ).length;
+
   return (
     <ScrollView 
       style={styles.container}
@@ -180,21 +225,11 @@ export default function DoctorDashboardScreen() {
       }
     >
       <View style={styles.header}>
-        <View>
-          <TouchableOpacity onPress={() => navigation.navigate('Profile' as never)}>
-            <Text style={styles.welcome}>
-              Hola, Dr. {user?.username} 
-            </Text>
-          </TouchableOpacity>
-          <Text style={styles.subtitle}>
-            {new Date().toLocaleDateString('es-ES', { 
-              weekday: 'long', 
-              day: 'numeric', 
-              month: 'long',
-              year: 'numeric'
-            })}
+        <TouchableOpacity onPress={() => navigation.navigate('Profile' as never)}>
+          <Text style={styles.welcome}>
+            Hola, Dra. {user?.username} {user?.lastname}
           </Text>
-        </View>
+        </TouchableOpacity>
         <TouchableOpacity 
           style={styles.logoutButton}
           onPress={handleLogout}
@@ -207,94 +242,51 @@ export default function DoctorDashboardScreen() {
         <Text style={styles.statsTitle}>Resumen del Día</Text>
         <View style={styles.statsGrid}>
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{stats.total}</Text>
+            <Text style={styles.statNumber}>{totalAppointments}</Text>
             <Text style={styles.statLabel}>Total Citas</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{stats.pending}</Text>
+            <Text style={styles.statNumber}>{pendingAppointments}</Text>
             <Text style={styles.statLabel}>Pendientes</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{stats.inProgress}</Text>
+            <Text style={styles.statNumber}>{inProgressAppointments}</Text>
             <Text style={styles.statLabel}>En Progreso</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{stats.completed}</Text>
+            <Text style={styles.statNumber}>{completedAppointments}</Text>
             <Text style={styles.statLabel}>Completadas</Text>
           </View>
         </View>
       </View>
       
-      <View style={styles.statsContainer}>
-        <TouchableOpacity 
-          style={styles.statCard}
-          onPress={() => navigation.navigate('Owners' as never)}
-        >
-          <Text style={styles.statNumber}>{owners.length}</Text>
-          <Text style={styles.statLabel}>Clientes</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={styles.statCard}
-          onPress={() => navigation.navigate('Patients' as never)}
-        >
-          <Text style={styles.statNumber}>{pets.length}</Text>
-          <Text style={styles.statLabel}>Pacientes</Text>
-        </TouchableOpacity>
-      </View>
-      
       <View style={styles.appointmentsSection}>
-        <Text style={styles.sectionTitle}>
-          Citas para Hoy ({todayAppointments.length})
-        </Text>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>
+            Citas para Hoy ({totalAppointments})
+          </Text>
+          <TouchableOpacity onPress={() => navigation.navigate('DoctorAppointments' as never)}>
+            <Text style={styles.seeAllLink}>Ver todas mis citas ›</Text>
+          </TouchableOpacity>
+        </View>
         
-        {todayAppointments.length === 0 ? (
+        {loading && refreshing ? (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No hay citas programadas para hoy</Text>
-            <TouchableOpacity 
-              style={styles.emptyButton}
-              onPress={() => navigation.navigate('AppointmentForm' as never)}
-            >
-              <Text style={styles.emptyButtonText}>Agendar Cita</Text>
-            </TouchableOpacity>
+            <Text style={styles.emptyText}>Actualizando...</Text>
+          </View>
+        ) : todayAppointments.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>No hay citas para hoy</Text>
+            <Text style={styles.emptySubtext}>Disfruta tu día</Text>
           </View>
         ) : (
           <FlatList
-            data={todayAppointments}
+            data={todayAppointments.slice(0, 3)}
             renderItem={renderAppointment}
             keyExtractor={(item) => item._id}
             scrollEnabled={false}
           />
         )}
-      </View>
-      
-      <View style={styles.quickActions}>
-        <Text style={styles.sectionTitle}>Acciones Rápidas</Text>
-        <View style={styles.actionsGrid}>
-          <TouchableOpacity 
-            style={styles.actionButton}
-            onPress={() => navigation.navigate('AppointmentForm' as never)}
-          >
-            <Text style={styles.actionIcon}>📅</Text>
-            <Text style={styles.actionText}>Nueva Cita</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.actionButton}
-            onPress={() => navigation.navigate('Profile' as never)}
-          >
-            <Text style={styles.actionIcon}>👤</Text>
-            <Text style={styles.actionText}>Mi Perfil</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.actionButton}
-            onPress={() => navigation.navigate('Appointments' as never)}
-          >
-            <Text style={styles.actionIcon}>📋</Text>
-            <Text style={styles.actionText}>Ver Todas</Text>
-          </TouchableOpacity>
-        </View>
       </View>
     </ScrollView>
   );
@@ -342,12 +334,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: 'white',
   },
-  subtitle: {
-    fontSize: 14,
-    color: '#bbf7d0',
-    marginTop: 4,
-    textTransform: 'capitalize',
-  },
   logoutButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     paddingHorizontal: 16,
@@ -392,46 +378,38 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     alignItems: 'center',
   },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    marginTop: 8,
-  },
-  statCard: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 16,
-    width: '48%',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
   statNumber: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#0f172a',
+    color: '#0c4a6e',
   },
   statLabel: {
     fontSize: 12,
-    color: '#64748b',
+    color: '#0284c7',
     marginTop: 4,
   },
   appointmentsSection: {
     backgroundColor: 'white',
     marginHorizontal: 16,
-    marginTop: 16,
+    marginTop: 8,
     borderRadius: 16,
     padding: 20,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#0f172a',
-    marginBottom: 16,
+  },
+  seeAllLink: {
+    fontSize: 14,
+    color: '#0891b2',
+    fontWeight: '500',
   },
   appointmentCard: {
     backgroundColor: '#f8fafc',
@@ -497,46 +475,10 @@ const styles = StyleSheet.create({
   emptyText: {
     color: '#94a3b8',
     fontSize: 16,
-    marginBottom: 12,
-  },
-  emptyButton: {
-    backgroundColor: '#0891b2',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  emptyButtonText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  quickActions: {
-    backgroundColor: 'white',
-    margin: 16,
-    marginTop: 8,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 30,
-  },
-  actionsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  actionButton: {
-    backgroundColor: '#f0f9ff',
-    width: '31%',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  actionIcon: {
-    fontSize: 24,
     marginBottom: 8,
   },
-  actionText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#0c4a6e',
-    textAlign: 'center',
+  emptySubtext: {
+    color: '#cbd5e1',
+    fontSize: 14,
   },
 });
