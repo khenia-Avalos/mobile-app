@@ -1,5 +1,5 @@
 // src/screens/Clinic/DoctorDashboardScreen.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -10,7 +10,7 @@ import {
   FlatList,
   Alert 
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../hooks/useAuth';
 import { useClinic } from '../../contexts/ClinicContext';
 import axios from '../../api/axios-mobile';
@@ -23,23 +23,43 @@ export default function DoctorDashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [todayAppointments, setTodayAppointments] = useState<any[]>([]);
   const [todaysDate, setTodaysDate] = useState('');
+  const [currentDateCR, setCurrentDateCR] = useState('');
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
 
-  // ✅ Función CORREGIDA para obtener la fecha actual en Costa Rica (YYYY-MM-DD)
+  // ✅ Función para obtener la fecha actual en Costa Rica (YYYY-MM-DD)
   const getCurrentDateCR = () => {
     const date = new Date();
-    // Opción 1: Usar toLocaleDateString con la zona horaria
     const options: Intl.DateTimeFormatOptions = { 
       timeZone: 'America/Costa_Rica',
       year: 'numeric',
       month: '2-digit',
       day: '2-digit'
     };
-    const crDateStr = date.toLocaleDateString('en-CA', options); // en-CA da formato YYYY-MM-DD
-    return crDateStr;
+    return date.toLocaleDateString('en-CA', options);
   };
 
+  // ✅ Función para obtener la fecha de la cita SIN CONVERSIÓN
+  const getAppointmentDate = (apt: any): string => {
+    if (!apt.appointmentDate) return '';
+    
+    if (apt.appointmentDate.includes('T')) {
+      return apt.appointmentDate.split('T')[0];
+    }
+    
+    return apt.appointmentDate;
+  };
+
+  // ✅ Cargar datos cuando la pantalla obtiene foco
+  useFocusEffect(
+    useCallback(() => {
+      console.log(' DoctorDashboard enfocado - cargando datos...');
+      loadDashboardData();
+    }, [])
+  );
+
   useEffect(() => {
-    loadDashboardData();
+    const crDate = getCurrentDateCR();
+    setCurrentDateCR(crDate);
     
     const today = new Date();
     const options: Intl.DateTimeFormatOptions = { 
@@ -50,25 +70,98 @@ export default function DoctorDashboardScreen() {
       timeZone: 'America/Costa_Rica'
     };
     setTodaysDate(today.toLocaleDateString('es-ES', options));
+    
+    loadDashboardData();
+    
+    const interval = setInterval(() => {
+      const newCRDate = getCurrentDateCR();
+      if (newCRDate !== currentDateCR) {
+        console.log('Día cambiado en CR, recargando datos...');
+        setCurrentDateCR(newCRDate);
+        
+        const today = new Date();
+        const options: Intl.DateTimeFormatOptions = { 
+          weekday: 'long', 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric',
+          timeZone: 'America/Costa_Rica'
+        };
+        setTodaysDate(today.toLocaleDateString('es-ES', options));
+        
+        loadDashboardData();
+      }
+    }, 60000);
+    
+    return () => clearInterval(interval);
   }, []);
+
+  // ✅ EFECTO PRINCIPAL: Filtrar citas cada vez que cambian
+  useEffect(() => {
+    if (!initialLoadDone && appointments.length === 0) {
+      console.log(' Esperando carga inicial de citas...');
+      return;
+    }
+    
+    filterTodayAppointments();
+  }, [appointments, currentDateCR]);
+
+  const filterTodayAppointments = () => {
+    const todayCR = getCurrentDateCR();
+    const vetId = user?._id || user?.id;
+    
+    console.log(' Filtrando citas para hoy:', todayCR);
+    console.log('    Total citas disponibles:', appointments.length);
+    
+    if (appointments.length === 0) {
+      console.log('   No hay citas para filtrar');
+      setTodayAppointments([]);
+      return;
+    }
+    
+    // Mostrar todas las fechas para depuración
+    appointments.forEach(apt => {
+      const aptDate = getAppointmentDate(apt);
+      console.log(`   Cita: ${apt.title} - Fecha backend: ${apt.appointmentDate} - Fecha extraída: ${aptDate}`);
+    });
+    
+    const filtered = appointments.filter(apt => {
+      const aptDate = getAppointmentDate(apt);
+      const isToday = aptDate === todayCR;
+      
+      if (isToday) {
+        console.log(`   Cita de HOY: ${apt.title} - ${apt.startTime} (${apt.status})`);
+      }
+      
+      return isToday;
+    });
+    
+    console.log(`Total citas para hoy: ${filtered.length}`);
+    setTodayAppointments(filtered);
+    setInitialLoadDone(true);
+  };
 
   const loadDashboardData = async () => {
     const todayCR = getCurrentDateCR();
     const vetId = user?._id || user?.id;
     
-    console.log('📅 DoctorDashboard - Cargando citas:');
-    console.log('   👤 Usuario:', user?.username);
-    console.log('   🆔 ID del usuario:', vetId);
-    console.log('   📆 Fecha Costa Rica:', todayCR);
+    console.log(' DoctorDashboard - Cargando citas:');
+    console.log('    Usuario:', user?.username);
+    console.log('    ID del usuario:', vetId);
+    console.log('    Fecha Costa Rica:', todayCR);
     
-    if (todayCR === 'NaN-NaN-NaN' || !todayCR) {
-      console.log('❌ Error: Fecha inválida');
-      return;
+    try {
+      // Cargar citas con filtro por fecha y por veterinario
+      await fetchAppointments({ 
+        date: todayCR,
+        veterinarian: vetId,
+        showPast: 'true' // Incluir todos los estados
+      });
+      
+      console.log('Citas cargadas correctamente');
+    } catch (error) {
+      console.error(' Error cargando citas:', error);
     }
-    
-    await fetchAppointments({ 
-      date: todayCR
-    });
   };
 
   const onRefresh = async () => {
@@ -76,44 +169,6 @@ export default function DoctorDashboardScreen() {
     await loadDashboardData();
     setRefreshing(false);
   };
-
-  // Filtrar citas para asegurar que solo sean de hoy en Costa Rica
-  useEffect(() => {
-    if (!appointments.length) {
-      setTodayAppointments([]);
-      return;
-    }
-    
-    const todayCR = getCurrentDateCR();
-    const vetId = user?._id || user?.id;
-    
-    console.log('🔍 Verificando citas para hoy en Costa Rica:', todayCR);
-    console.log('   📊 Total citas recibidas:', appointments.length);
-    
-    // Filtrar SOLO las citas de hoy en Costa Rica
-    const filtered = appointments.filter(apt => {
-      // Obtener la fecha de la cita en formato YYYY-MM-DD (viene en UTC del backend)
-      let aptDateStr = '';
-      if (apt.appointmentDate) {
-        // Convertir la fecha UTC a string YYYY-MM-DD
-        const aptDate = new Date(apt.appointmentDate);
-        aptDateStr = aptDate.toISOString().split('T')[0];
-      }
-      
-      const isToday = aptDateStr === todayCR;
-      
-      if (isToday) {
-        console.log(`   ✅ Cita de HOY: ${apt.title} - ${apt.startTime} (${apt.status})`);
-      } else {
-        console.log(`   ❌ Cita de OTRO DÍA: ${aptDateStr} - ${apt.title}`);
-      }
-      
-      return isToday;
-    });
-    
-    console.log(`📊 Total citas para hoy: ${filtered.length}`);
-    setTodayAppointments(filtered);
-  }, [appointments, user]);
 
   const handleLogout = async () => {
     Alert.alert(
@@ -134,77 +189,81 @@ export default function DoctorDashboardScreen() {
 
   const handleUpdateAppointmentStatus = async (appointmentId: string, status: string) => {
     try {
-      console.log(`🔄 Actualizando cita ${appointmentId} a estado: ${status}`);
+      console.log(` Actualizando cita ${appointmentId} a estado: ${status}`);
       const response = await axios.patch(`/api/appointments/${appointmentId}/status`, { status });
-      console.log('✅ Respuesta:', response.data);
-      Alert.alert('✅ Éxito', 'Estado actualizado');
-      loadDashboardData();
+      console.log(' Respuesta:', response.data);
+      Alert.alert('Éxito', 'Estado actualizado');
+      await loadDashboardData(); // Recargar después de actualizar
     } catch (error: any) {
-      console.error('❌ Error al actualizar estado:', error.response?.data || error);
-      Alert.alert('❌ Error', error.response?.data?.message || 'No se pudo actualizar el estado');
+      console.error(' Error al actualizar estado:', error.response?.data || error);
+      Alert.alert('Error', error.response?.data?.message || 'No se pudo actualizar el estado');
     }
   };
 
-  const renderAppointment = ({ item }: any) => (
-    <TouchableOpacity 
-      style={styles.appointmentCard}
-      onPress={() => {
-        Alert.alert(
-          'Detalles de la Cita',
-          `📅 ${new Date(item.appointmentDate).toLocaleDateString('es-ES', { timeZone: 'America/Costa_Rica' })}\n` +
-          `⏰ ${item.startTime} - ${item.endTime}\n` +
-          `🐾 Paciente: ${item.pet?.name || 'No especificado'}\n` +
-          `👤 Dueño: ${item.owner?.firstName || ''} ${item.owner?.lastName || ''}\n` +
-          `📞 Teléfono: ${item.owner?.phone || 'No registrado'}\n` +
-          `📝 Motivo: ${item.title}\n` +
-          `🏷️ Tipo: ${item.type || 'No especificado'}`,
-          [
-            { text: 'Cerrar', style: 'cancel' },
-            ...(item.status !== 'in-progress' ? [{ 
-              text: 'Marcar como En Progreso', 
-              onPress: () => handleUpdateAppointmentStatus(item._id, 'in-progress'),
-              style: 'default' as const
-            }] : []),
-            ...(item.status !== 'completed' ? [{ 
-              text: 'Marcar como Completada', 
-              onPress: () => handleUpdateAppointmentStatus(item._id, 'completed'),
-              style: 'default' as const
-            }] : [])
-          ]
-        );
-      }}
-    >
-      <View style={styles.appointmentHeader}>
-        <Text style={styles.appointmentTime}>
-          {item.startTime} - {item.endTime}
-        </Text>
-        <View style={[
-          styles.statusBadge,
-          { backgroundColor: getStatusColor(item.status) }
-        ]}>
-          <Text style={styles.statusText}>
-            {getStatusText(item.status)}
+  const renderAppointment = ({ item }: any) => {
+    const aptDate = getAppointmentDate(item);
+    const [year, month, day] = aptDate.split('-');
+    const displayDate = `${day}/${month}/${year}`;
+    
+    return (
+      <TouchableOpacity 
+        style={styles.appointmentCard}
+        onPress={() => {
+          Alert.alert(
+            'Detalles de la Cita',
+            `Fecha: ${displayDate}\n` +
+            `Hora: ${item.startTime} - ${item.endTime}\n` +
+            `Paciente: ${item.pet?.name || 'No especificado'}\n` +
+            `Dueño: ${item.owner?.firstName || ''} ${item.owner?.lastName || ''}\n` +
+            `Teléfono: ${item.owner?.phone || 'No registrado'}\n` +
+            `Motivo: ${item.title}\n` +
+            `Tipo: ${item.type || 'No especificado'}`,
+            [
+              { text: 'Cerrar', style: 'cancel' },
+              ...(item.status !== 'in-progress' ? [{ 
+                text: 'Marcar como En Progreso', 
+                onPress: () => handleUpdateAppointmentStatus(item._id, 'in-progress')
+              }] : []),
+              ...(item.status !== 'completed' ? [{ 
+                text: 'Marcar como Completada', 
+                onPress: () => handleUpdateAppointmentStatus(item._id, 'completed')
+              }] : [])
+            ]
+          );
+        }}
+      >
+        <View style={styles.appointmentHeader}>
+          <Text style={styles.appointmentTime}>
+            {item.startTime} - {item.endTime}
           </Text>
+          <View style={[
+            styles.statusBadge,
+            { backgroundColor: getStatusColor(item.status) }
+          ]}>
+            <Text style={styles.statusText}>
+              {getStatusText(item.status)}
+            </Text>
+          </View>
         </View>
-      </View>
-      
-      <Text style={styles.appointmentTitle}>{item.title}</Text>
-      
-      <View style={styles.appointmentDetails}>
-        <Text style={styles.patientInfo}>
-          🐾 {item.pet?.name || 'Sin mascota'} ({item.pet?.species || '?'})
-        </Text>
-        <Text style={styles.ownerInfo}>
-          👤 {item.owner?.firstName || ''} {item.owner?.lastName || ''}
-        </Text>
-        {item.pet?.specialConditions && (
-          <Text style={styles.specialConditions}>
-            ⚠️ {item.pet.specialConditions}
+        
+        <Text style={styles.appointmentTitle}>{item.title}</Text>
+        
+        <View style={styles.appointmentDetails}>
+          <Text style={styles.patientInfo}>
+             {item.pet?.name || 'Sin mascota'} ({item.pet?.species || '?'})
           </Text>
-        )}
-      </View>
-    </TouchableOpacity>
-  );
+          <Text style={styles.ownerInfo}>
+             {item.owner?.firstName || ''} {item.owner?.lastName || ''}
+          </Text>
+          {item.pet?.specialConditions && (
+            <Text style={styles.specialConditions}>
+               {item.pet.specialConditions}
+            </Text>
+          )}
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   const totalAppointments = todayAppointments.length;
   const pendingAppointments = todayAppointments.filter(a => 
@@ -230,12 +289,12 @@ export default function DoctorDashboardScreen() {
             Hola, Dra. {user?.username} {user?.lastname}
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.logoutButton}
-          onPress={handleLogout}
-        >
-          <Text style={styles.logoutButtonText}>Salir</Text>
-        </TouchableOpacity>
+     
+      </View>
+      
+      <View style={styles.dateCard}>
+        <Text style={styles.dateText}>{todaysDate}</Text>
+        <Text style={styles.dateSubtext}>Hora CR: {new Date().toLocaleTimeString('es-ES', { timeZone: 'America/Costa_Rica', hour: '2-digit', minute: '2-digit' })}</Text>
       </View>
       
       <View style={styles.statsCard}>
@@ -270,9 +329,9 @@ export default function DoctorDashboardScreen() {
           </TouchableOpacity>
         </View>
         
-        {loading && refreshing ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>Actualizando...</Text>
+        {loading && !refreshing && todayAppointments.length === 0 ? (
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Cargando citas...</Text>
           </View>
         ) : todayAppointments.length === 0 ? (
           <View style={styles.emptyContainer}>
@@ -286,6 +345,17 @@ export default function DoctorDashboardScreen() {
             keyExtractor={(item) => item._id}
             scrollEnabled={false}
           />
+        )}
+        
+        {todayAppointments.length > 3 && (
+          <TouchableOpacity 
+            style={styles.viewMoreButton}
+            onPress={() => navigation.navigate('DoctorAppointments' as never)}
+          >
+            <Text style={styles.viewMoreText}>
+              Ver {todayAppointments.length - 3} citas más...
+            </Text>
+          </TouchableOpacity>
         )}
       </View>
     </ScrollView>
@@ -347,10 +417,31 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
   },
+  dateCard: {
+    backgroundColor: '#e6f7ff',
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+  },
+  dateText: {
+    fontSize: 16,
+    color: '#0369a1',
+    fontWeight: '500',
+    textTransform: 'capitalize',
+    marginBottom: 4,
+  },
+  dateSubtext: {
+    fontSize: 14,
+    color: '#0284c7',
+  },
   statsCard: {
     backgroundColor: 'white',
     margin: 16,
-    marginTop: 20,
+    marginTop: 8,
     borderRadius: 16,
     padding: 20,
     shadowColor: '#000',
@@ -392,6 +483,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     marginHorizontal: 16,
     marginTop: 8,
+    marginBottom: 20,
     borderRadius: 16,
     padding: 20,
   },
@@ -480,5 +572,23 @@ const styles = StyleSheet.create({
   emptySubtext: {
     color: '#cbd5e1',
     fontSize: 14,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    color: '#94a3b8',
+    fontSize: 16,
+  },
+  viewMoreButton: {
+    alignItems: 'center',
+    paddingVertical: 12,
+    marginTop: 8,
+  },
+  viewMoreText: {
+    color: '#0891b2',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

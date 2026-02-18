@@ -47,6 +47,7 @@ export default function PetFormScreen() {
   const [formData, setFormData] = useState({
     name: '',
     species: 'Perro',
+    otherSpecies: '', // 👈 Nuevo campo para especie personalizada
     breed: '',
     color: '',
     gender: 'Macho',
@@ -68,7 +69,17 @@ export default function PetFormScreen() {
   const [medicationInput, setMedicationInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const speciesOptions = ['Perro', 'Gato', 'Otro'];
+  // 👇 NUEVA LISTA: Especies comunes ampliada
+  const speciesOptions = [
+    'Perro', 
+    'Gato', 
+    'Ave', 
+    'Conejo', 
+    'Hámster', 
+   
+    'Otro'
+  ];
+  
   const genderOptions = ['Macho', 'Hembra'];
   const weightUnits = ['kg', 'g', 'lb'];
 
@@ -99,9 +110,13 @@ export default function PetFormScreen() {
       if (!id) return;
       const pet = await fetchPet(id);
       if (pet) {
+        // Determinar si la especie está en la lista predefinida o es personalizada
+        const isPredefined = speciesOptions.includes(pet.species);
+        
         setFormData({
           name: pet.name || '',
-          species: pet.species || 'Perro',
+          species: isPredefined ? pet.species : 'Otro',
+          otherSpecies: !isPredefined ? pet.species : '', // Si no está en la lista, guardar en otherSpecies
           breed: pet.breed || '',
           color: pet.color || '',
           gender: pet.gender || 'Macho',
@@ -173,6 +188,12 @@ export default function PetFormScreen() {
       Alert.alert('Error', 'Debes seleccionar un dueño');
       return false;
     }
+
+    // 👇 NUEVA VALIDACIÓN: Si selecciona "Otro", debe especificar la especie
+    if (formData.species === 'Otro' && !formData.otherSpecies.trim()) {
+      Alert.alert('Error', 'Debes especificar la especie cuando seleccionas "Otro"');
+      return false;
+    }
     
     return true;
   };
@@ -183,10 +204,15 @@ export default function PetFormScreen() {
     setIsSubmitting(true);
     
     try {
+      // 👇 Determinar la especie final (si es "Otro", usar otherSpecies)
+      const finalSpecies = formData.species === 'Otro' 
+        ? formData.otherSpecies.trim() 
+        : formData.species;
+
       // Preparar datos EXACTAMENTE como espera el backend
       const petData: any = {
         name: formData.name.trim(),
-        species: formData.species,
+        species: finalSpecies, // Usar la especie final
         breed: formData.breed || '',
         color: formData.color || '',
         gender: formData.gender || 'Macho',
@@ -198,16 +224,14 @@ export default function PetFormScreen() {
         notes: formData.notes || '',
         sterilized: formData.sterilized || false,
         owner: formData.owner,
-        // NO enviar userId - el backend lo obtiene del token
-        // NO enviar lastVisit - el backend lo agrega automáticamente
       };
 
       // SOLO agregar birthDate si existe
       if (formData.birthDate) {
-        petData.birthDate = formData.birthDate; // Enviar como Date object
+        petData.birthDate = formData.birthDate;
       }
 
-      console.log('📤 Enviando mascota:', JSON.stringify(petData, null, 2));
+      console.log(' Enviando mascota:', JSON.stringify(petData, null, 2));
 
       let result;
       if (isEditing) {
@@ -318,7 +342,7 @@ export default function PetFormScreen() {
         {/* Especie y Género */}
         <View style={styles.inputRow}>
           <View style={styles.halfInput}>
-            <Text style={styles.label}>Especie</Text>
+            <Text style={styles.label}>Especie *</Text>
             <View style={styles.optionsContainer}>
               {speciesOptions.map((species) => (
                 <TouchableOpacity
@@ -338,6 +362,22 @@ export default function PetFormScreen() {
                 </TouchableOpacity>
               ))}
             </View>
+            
+            {/* 👇 Campo adicional para "Otro" */}
+            {formData.species === 'Otro' && (
+              <View style={styles.otherSpeciesContainer}>
+                <Text style={styles.otherSpeciesLabel}>Especificar especie *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Ej: Erizo, Serpiente, etc."
+                  value={formData.otherSpecies}
+                  onChangeText={(text) => setFormData({ ...formData, otherSpecies: text })}
+                />
+                <Text style={styles.helperText}>
+                  Por favor, especifica la especie de tu mascota
+                </Text>
+              </View>
+            )}
           </View>
           
           <View style={styles.halfInput}>
@@ -740,6 +780,21 @@ const styles = StyleSheet.create({
   optionButtonTextSelected: {
     color: 'white',
     fontWeight: '500',
+  },
+  // 👇 Nuevos estilos para el campo "Otro"
+  otherSpeciesContainer: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: '#f0f9ff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+  },
+  otherSpeciesLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0369a1',
+    marginBottom: 8,
   },
   smallOptionButton: {
     backgroundColor: '#f3f4f6',

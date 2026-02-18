@@ -100,13 +100,7 @@ export default function LoginScreen() {
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.linkButton}
-          onPress={() => navigation.navigate('Register' as never)}
-        >
-          <Text style={styles.linkText}>¿No tienes cuenta? Regístrate</Text>
-        </TouchableOpacity>
-
+   
         <TouchableOpacity
           style={styles.linkButton}
           onPress={() => navigation.navigate('ForgotPassword' as never)}

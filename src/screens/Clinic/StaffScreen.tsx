@@ -12,7 +12,7 @@ import {
   Modal,
   ScrollView
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../hooks/useAuth';
 import axios from '../../api/axios-mobile';
 
@@ -23,7 +23,7 @@ interface User {
   email: string;
   phoneNumber: string;
   lastname: string;
-  role: 'admin' | 'veterinarian' | 'assistant' | 'client';
+  role: 'admin' | 'veterinarian' | 'client';
   active: boolean;
   specialty?: string;
   licenseNumber?: string;
@@ -51,6 +51,14 @@ export default function StaffScreen() {
     loadStaff();
   }, []);
 
+  // 🔄 REFRESH AUTOMÁTICO: Recargar datos cuando la pantalla recibe foco
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('📱 StaffScreen enfocado - recargando datos...');
+      loadStaff();
+    }, [])
+  );
+
   useEffect(() => {
     filterStaff();
   }, [staff, searchQuery, roleFilter]);
@@ -58,10 +66,9 @@ export default function StaffScreen() {
   const loadStaff = async () => {
     setLoading(true);
     try {
-      // Cargar TODOS los usuarios
       const usersResponse = await axios.get('/api/admin/users');
       
-      console.log('📥 Respuesta de usuarios:', usersResponse.data);
+      console.log('Respuesta de usuarios:', usersResponse.data);
       
       let allUsers = [];
       if (usersResponse.data?.users) {
@@ -72,25 +79,21 @@ export default function StaffScreen() {
         allUsers = usersResponse.data.data;
       }
       
-      console.log('👥 Usuarios encontrados:', allUsers.length);
+      console.log(' Usuarios encontrados:', allUsers.length);
       
-      // Filtrar solo personal (excluir clientes)
       const staffUsers = allUsers.filter((u: User) => 
-        u.role === 'veterinarian' || u.role === 'assistant'
+        u.role === 'veterinarian'
       );
       
-      console.log('👨‍⚕️ Personal filtrado:', staffUsers.length);
-      console.log('   Veterinarios:', staffUsers.filter((u: User) => u.role === 'veterinarian').length);
-      console.log('   Asistentes:', staffUsers.filter((u: User) => u.role === 'assistant').length);
+      console.log(' Personal filtrado:', staffUsers.length);
       
-      // Transformar datos para asegurar formato correcto
       const formattedStaff = staffUsers.map((user: any) => ({
         _id: user._id || user.id,
         username: user.username || '',
         email: user.email || '',
         phoneNumber: user.phoneNumber || 'No registrado',
         lastname: user.lastname || '',
-        role: user.role || 'assistant',
+        role: user.role || 'veterinarian',
         active: user.active !== false,
         specialty: user.specialty || '',
         licenseNumber: user.licenseNumber,
@@ -102,7 +105,7 @@ export default function StaffScreen() {
       setStaff(formattedStaff);
       
     } catch (error) {
-      console.error('❌ Error loading staff:', error);
+      console.error(' Error loading staff:', error);
       Alert.alert('Error', 'No se pudo cargar el personal');
     } finally {
       setLoading(false);
@@ -176,11 +179,10 @@ export default function StaffScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              // Aquí iría la llamada a la API para eliminar
               setStaff(prev => prev.filter(u => u._id !== user._id));
-              Alert.alert('✅ Éxito', 'Usuario eliminado correctamente');
+              Alert.alert(' Éxito', 'Usuario eliminado correctamente');
             } catch (error) {
-              console.error('❌ Error al eliminar:', error);
+              console.error(' Error al eliminar:', error);
               Alert.alert('Error', 'No se pudo eliminar el usuario');
             }
           }
@@ -196,7 +198,7 @@ export default function StaffScreen() {
     }
 
     Alert.alert(
-      user.active ? 'Desactivar Personal' : 'Activar Personal',
+      user.active ? 'Desactivar Veterinario' : 'Activar Veterinario',
       user.active 
         ? `¿Estás seguro de desactivar a ${user.username}?\n\nEsto pondrá TODOS sus horarios como NO DISPONIBLES.`
         : `¿Estás seguro de activar a ${user.username}?\n\nEsto restaurará sus horarios normales.`,
@@ -206,71 +208,59 @@ export default function StaffScreen() {
           text: user.active ? 'Sí, desactivar' : 'Sí, activar',
           onPress: async () => {
             try {
-              if (user.role === 'veterinarian') {
-                const currentAvailability = user.defaultAvailability || {};
-                
-                const newAvailability = {
-                  monday: { 
-                    ...currentAvailability.monday,
-                    available: !user.active
-                  },
-                  tuesday: { 
-                    ...currentAvailability.tuesday,
-                    available: !user.active
-                  },
-                  wednesday: { 
-                    ...currentAvailability.wednesday,
-                    available: !user.active
-                  },
-                  thursday: { 
-                    ...currentAvailability.thursday,
-                    available: !user.active
-                  },
-                  friday: { 
-                    ...currentAvailability.friday,
-                    available: !user.active
-                  },
-                  saturday: { 
-                    ...currentAvailability.saturday,
-                    available: !user.active
-                  },
-                  sunday: { 
-                    ...currentAvailability.sunday,
-                    available: !user.active
-                  }
-                };
+              const currentAvailability = user.defaultAvailability || {};
+              
+              const newAvailability = {
+                monday: { 
+                  ...currentAvailability.monday,
+                  available: !user.active
+                },
+                tuesday: { 
+                  ...currentAvailability.tuesday,
+                  available: !user.active
+                },
+                wednesday: { 
+                  ...currentAvailability.wednesday,
+                  available: !user.active
+                },
+                thursday: { 
+                  ...currentAvailability.thursday,
+                  available: !user.active
+                },
+                friday: { 
+                  ...currentAvailability.friday,
+                  available: !user.active
+                },
+                saturday: { 
+                  ...currentAvailability.saturday,
+                  available: !user.active
+                },
+                sunday: { 
+                  ...currentAvailability.sunday,
+                  available: !user.active
+                }
+              };
 
-                const response = await axios.put(`/api/admin/users/${user._id}`, { 
-                  active: !user.active,
-                  defaultAvailability: newAvailability
-                });
-                
-                setStaff(prev => prev.map(u => 
-                  u._id === user._id 
-                    ? { ...u, active: !u.active, defaultAvailability: newAvailability } 
-                    : u
-                ));
-                
-                Alert.alert(
-                  '✅ Éxito', 
-                  user.active 
-                    ? `${user.username} ha sido desactivado. TODOS sus horarios están ahora NO DISPONIBLES.`
-                    : `${user.username} ha sido activado. Sus horarios han sido restaurados.`
-                );
-              } else {
-                const response = await axios.put(`/api/admin/users/${user._id}`, { 
-                  active: !user.active 
-                });
-                
-                setStaff(prev => prev.map(u => 
-                  u._id === user._id ? { ...u, active: !u.active } : u
-                ));
-                
-                Alert.alert('✅ Éxito', `Usuario ${user.active ? 'desactivado' : 'activado'} correctamente`);
-              }
+              const response = await axios.put(`/api/admin/users/${user._id}`, { 
+                active: !user.active,
+                defaultAvailability: newAvailability
+              });
+              
+              setStaff(prev => prev.map(u => 
+                u._id === user._id 
+                  ? { ...u, active: !u.active, defaultAvailability: newAvailability } 
+                  : u
+              ));
+              
+              Alert.alert(
+                ' Éxito', 
+                user.active 
+                  ? `${user.username} ha sido desactivado.`
+                  : `${user.username} ha sido activado.`
+              );
             } catch (error: any) {
-              console.error('❌ Error al actualizar en backend:', error);
-              Alert.alert('Error', error.response?.data?.[0] || 'No se pudo actualizar el estado en el servidor');
+              console.error(' Error al actualizar en backend:', error);
+              Alert.alert('Error', error.response?.data?.[0] || 'No se pudo actualizar el estado');
             }
           }
         }
@@ -293,25 +283,6 @@ export default function StaffScreen() {
     });
   };
 
-  const getRoleText = (role: string) => {
-    const roleMap: Record<string, string> = {
-      'admin': 'Administrador',
-      'veterinarian': 'Veterinario',
-      'assistant': 'Asistente',
-      'client': 'Cliente'
-    };
-    return roleMap[role] || role;
-  };
-
-  const getRoleColor = (role: string) => {
-    switch(role) {
-      case 'admin': return '#ef4444';
-      case 'veterinarian': return '#0891b2';
-      case 'assistant': return '#f59e0b';
-      default: return '#6b7280';
-    }
-  };
-
   const renderStaffCard = ({ item }: { item: User }) => (
     <TouchableOpacity
       style={[
@@ -325,9 +296,6 @@ export default function StaffScreen() {
           <Text style={styles.staffName}>
             {item.username} {item.lastname}
           </Text>
-          <View style={[styles.roleBadge, { backgroundColor: getRoleColor(item.role) }]}>
-            <Text style={styles.roleText}>{getRoleText(item.role)}</Text>
-          </View>
         </View>
         {!item.active && (
           <View style={styles.inactiveBadge}>
@@ -394,50 +362,17 @@ export default function StaffScreen() {
             Total: {staff.length} {staff.length === 1 ? 'miembro' : 'miembros'}
           </Text>
         </View>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={handleAddStaff}
-        >
-          <Text style={styles.addButtonText}>+ Nuevo Personal</Text>
-        </TouchableOpacity>
       </View>
 
       {!isAdmin && (
         <View style={styles.warningBanner}>
           <Text style={styles.warningText}>
-            ⚠️ Modo vista: Solo administradores pueden realizar cambios
+             Modo vista: Solo administradores pueden realizar cambios
           </Text>
         </View>
       )}
 
       <View style={styles.filterContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.roleFilter}>
-          <TouchableOpacity
-            style={[styles.filterChip, roleFilter === 'all' && styles.filterChipActive]}
-            onPress={() => setRoleFilter('all')}
-          >
-            <Text style={[styles.filterChipText, roleFilter === 'all' && styles.filterChipTextActive]}>
-              Todos ({staff.length})
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.filterChip, roleFilter === 'veterinarian' && styles.filterChipActive]}
-            onPress={() => setRoleFilter('veterinarian')}
-          >
-            <Text style={[styles.filterChipText, roleFilter === 'veterinarian' && styles.filterChipTextActive]}>
-              Veterinarios ({staff.filter(u => u.role === 'veterinarian').length})
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.filterChip, roleFilter === 'assistant' && styles.filterChipActive]}
-            onPress={() => setRoleFilter('assistant')}
-          >
-            <Text style={[styles.filterChipText, roleFilter === 'assistant' && styles.filterChipTextActive]}>
-              Asistentes ({staff.filter(u => u.role === 'assistant').length})
-            </Text>
-          </TouchableOpacity>
-        </ScrollView>
-
         <View style={styles.searchContainer}>
           <TextInput
             style={styles.searchInput}
@@ -467,10 +402,10 @@ export default function StaffScreen() {
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyEmoji}>👥</Text>
+            <Text style={styles.emptyEmoji}></Text>
             <Text style={styles.emptyTitle}>No hay personal</Text>
             <Text style={styles.emptyText}>
-              {searchQuery || roleFilter !== 'all'
+              {searchQuery
                 ? 'No se encontraron resultados con los filtros aplicados'
                 : 'No hay personal registrado en el sistema'}
             </Text>
@@ -487,7 +422,7 @@ export default function StaffScreen() {
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Detalles del Personal</Text>
+              <Text style={styles.modalTitle}>Detalles del Veterinario</Text>
               <TouchableOpacity onPress={() => setModalVisible(false)}>
                 <Text style={styles.modalClose}>✕</Text>
               </TouchableOpacity>
@@ -495,17 +430,8 @@ export default function StaffScreen() {
 
             {selectedUser && (
               <ScrollView style={styles.modalBody}>
-                <View style={styles.modalSection}>
-                  <View style={styles.modalStatusRow}>
-                    <View style={[styles.roleBadgeLarge, { backgroundColor: getRoleColor(selectedUser.role) }]}>
-                      <Text style={styles.roleTextLarge}>{getRoleText(selectedUser.role)}</Text>
-                    </View>
-                    <View style={[styles.statusBadge, !selectedUser.active && styles.statusInactive]}>
-                      <Text style={styles.statusText}>{selectedUser.active ? 'Activo' : 'Inactivo'}</Text>
-                    </View>
-                  </View>
-                </View>
-
+                {/* 👇 ELIMINADO: Sección completa del rol */}
+                
                 <View style={styles.modalSection}>
                   <Text style={styles.modalSectionTitle}>Información Personal</Text>
                   <View style={styles.modalRow}>
@@ -532,7 +458,7 @@ export default function StaffScreen() {
                   </View>
                 )}
 
-                {selectedUser.role === 'veterinarian' && selectedUser.defaultAvailability && (
+                {selectedUser.defaultAvailability && (
                   <View style={styles.modalSection}>
                     <Text style={styles.modalSectionTitle}>Horarios</Text>
                     <View style={styles.modalRow}>
@@ -630,7 +556,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     paddingTop: 60,
-    backgroundColor: '#0f766e',
+    backgroundColor: '#219eb4',
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
   },
@@ -662,7 +588,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#f59e0b',
+    borderColor: '#aca79f',
   },
   warningText: {
     color: '#92400e',
@@ -673,30 +599,6 @@ const styles = StyleSheet.create({
   filterContainer: {
     padding: 16,
     gap: 12,
-  },
-  roleFilter: {
-    flexDirection: 'row',
-  },
-  filterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#f1f5f9',
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  filterChipActive: {
-    backgroundColor: '#0891b2',
-    borderColor: '#0891b2',
-  },
-  filterChipText: {
-    fontSize: 14,
-    color: '#64748b',
-  },
-  filterChipTextActive: {
-    color: 'white',
-    fontWeight: '600',
   },
   searchContainer: {
     position: 'relative',
@@ -767,17 +669,6 @@ const styles = StyleSheet.create({
     color: '#0f172a',
     flex: 1,
   },
-  roleBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginLeft: 8,
-  },
-  roleText: {
-    color: 'white',
-    fontSize: 10,
-    fontWeight: '600',
-  },
   inactiveBadge: {
     backgroundColor: '#ef4444',
     paddingHorizontal: 8,
@@ -840,7 +731,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#10b981',
   },
   deactivateButton: {
-    backgroundColor: '#f59e0b',
+    backgroundColor: '#c4c0bb',
   },
   actionButtonText: {
     color: 'white',
@@ -910,35 +801,6 @@ const styles = StyleSheet.create({
     color: '#0f172a',
     marginBottom: 12,
   },
-  modalStatusRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  roleBadgeLarge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  roleTextLarge: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  statusBadge: {
-    backgroundColor: '#10b981',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  statusInactive: {
-    backgroundColor: '#ef4444',
-  },
-  statusText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
-  },
   modalRow: {
     flexDirection: 'row',
     marginBottom: 8,
@@ -977,7 +839,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#10b981',
   },
   modalDeactivateButton: {
-    backgroundColor: '#f59e0b',
+    backgroundColor: '#adacab',
   },
   modalButtonText: {
     color: 'white',

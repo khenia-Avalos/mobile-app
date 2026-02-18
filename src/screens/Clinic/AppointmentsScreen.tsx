@@ -422,7 +422,7 @@ export default function AppointmentsScreen() {
             style={styles.iconButton}
             onPress={() => setSearchModalVisible(true)}
           >
-            <Text style={styles.iconButtonText}>🔍</Text>
+            <Text style={styles.iconButtonText}>Buscar</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -430,7 +430,7 @@ export default function AppointmentsScreen() {
             onPress={() => setViewMode(viewMode === 'calendar' ? 'list' : 'calendar')}
           >
             <Text style={styles.iconButtonText}>
-              {viewMode === 'calendar' ? '📅' : '📋'}
+              {viewMode === 'calendar' ? 'Lista' : 'Calendario'}
             </Text>
           </TouchableOpacity>
 
@@ -487,7 +487,7 @@ export default function AppointmentsScreen() {
                   style={styles.emptyButton}
                   onPress={() => navigation.navigate('AppointmentForm' as never)}
                 >
-                  <Text style={styles.emptyButtonText}>+ Agendar Cita</Text>
+                  <Text style={styles.emptyButtonText}>Agendar Cita</Text>
                 </TouchableOpacity>
               </View>
             ) : (
@@ -603,7 +603,7 @@ export default function AppointmentsScreen() {
         </View>
       </Modal>
 
-      {/* MODAL DE ESTADOS - CON SCROLL PARA VER TODOS */}
+      {/* MODAL DE ESTADOS */}
       <Modal
         visible={statusModalVisible}
         animationType="slide"
@@ -636,7 +636,7 @@ export default function AppointmentsScreen() {
                 onPress={() => handleStatusSelect('scheduled')}
               >
                 <Text style={styles.statusOptionText}>Programada</Text>
-                <Text style={styles.statusOptionBadge}>📅</Text>
+                <Text style={styles.statusOptionBadge}></Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -644,7 +644,7 @@ export default function AppointmentsScreen() {
                 onPress={() => handleStatusSelect('confirmed')}
               >
                 <Text style={styles.statusOptionText}>Confirmada</Text>
-                <Text style={styles.statusOptionBadge}>✅</Text>
+                <Text style={styles.statusOptionBadge}></Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -652,7 +652,7 @@ export default function AppointmentsScreen() {
                 onPress={() => handleStatusSelect('in-progress')}
               >
                 <Text style={styles.statusOptionText}>En Progreso</Text>
-                <Text style={styles.statusOptionBadge}>⚙️</Text>
+                <Text style={styles.statusOptionBadge}></Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -660,7 +660,7 @@ export default function AppointmentsScreen() {
                 onPress={() => handleStatusSelect('completed')}
               >
                 <Text style={styles.statusOptionText}>Completada</Text>
-                <Text style={styles.statusOptionBadge}>✔️</Text>
+                <Text style={styles.statusOptionBadge}></Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -668,7 +668,7 @@ export default function AppointmentsScreen() {
                 onPress={() => handleStatusSelect('cancelled')}
               >
                 <Text style={styles.statusOptionText}>Cancelada</Text>
-                <Text style={styles.statusOptionBadge}>❌</Text>
+                <Text style={styles.statusOptionBadge}></Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -676,7 +676,7 @@ export default function AppointmentsScreen() {
                 onPress={() => handleStatusSelect('no-show')}
               >
                 <Text style={styles.statusOptionText}>No Asistió</Text>
-                <Text style={styles.statusOptionBadge}>🚫</Text>
+                <Text style={styles.statusOptionBadge}></Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -684,7 +684,7 @@ export default function AppointmentsScreen() {
                 onPress={() => handleStatusSelect('reschedule')}
               >
                 <Text style={styles.statusOptionText}>Reprogramar (eliminar y crear nueva)</Text>
-                <Text style={styles.statusOptionBadge}>🔄</Text>
+                <Text style={styles.statusOptionBadge}></Text>
               </TouchableOpacity>
             </ScrollView>
 
@@ -712,7 +712,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     paddingTop: 60,
-    backgroundColor: '#0f766e',
+    backgroundColor: '#219eb4',
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
   },
@@ -733,15 +733,17 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   iconButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
     backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   iconButtonText: {
-    fontSize: 20,
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '500',
   },
   addButton: {
     width: 44,

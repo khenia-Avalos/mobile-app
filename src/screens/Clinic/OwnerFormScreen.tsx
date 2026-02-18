@@ -44,7 +44,8 @@ export default function OwnerFormScreen() {
     firstName: '',
     lastName: '',
     email: '',
-    phone: ''
+    phone: '',
+    dni: '' // 👈 Agregado error para cédula
   });
 
   useEffect(() => {
@@ -61,7 +62,7 @@ export default function OwnerFormScreen() {
           firstName: owner.firstName || '',
           lastName: owner.lastName || '',
           email: owner.email || '',
-          phone: owner.phone || '+506 ', // Si no tiene, poner prefijo
+          phone: owner.phone || '+506 ',
           address: owner.address || '',
           dni: owner.dni || '',
           emergencyContact: owner.emergencyContact || {
@@ -79,68 +80,83 @@ export default function OwnerFormScreen() {
 
   // Función para validar formato de teléfono internacional
   const validatePhone = (phone: string) => {
-    // Si está vacío o solo tiene el prefijo, no es válido
     if (!phone || phone === '+' || phone === '+506 ' || phone === '+506') {
       return false;
     }
     
-    // Regex para teléfono: +[código país][número] (ej: +50688888888)
-    // Eliminar espacios para la validación
     const cleanPhone = phone.replace(/\s/g, '');
     const phoneRegex = /^\+\d{7,15}$/;
     return phoneRegex.test(cleanPhone);
   };
 
-  // Función para formatear teléfono mientras se escribe (sin causar repetición)
+  // 👇 NUEVA FUNCIÓN: Validar cédula (solo números, máximo 12 dígitos)
+  const validateDni = (dni: string) => {
+    // Si está vacío, es válido (campo opcional)
+    if (!dni || dni.trim() === '') {
+      return true;
+    }
+    
+    // Eliminar cualquier caracter que no sea número
+    const numbersOnly = dni.replace(/\D/g, '');
+    
+    // Verificar que solo tenga números y máximo 12 dígitos
+    return numbersOnly.length > 0 && numbersOnly.length <= 12;
+  };
+
+  // 👇 NUEVA FUNCIÓN: Formatear cédula (solo números)
+  const handleDniChange = (text: string) => {
+    // Eliminar cualquier caracter que no sea número
+    const numbersOnly = text.replace(/\D/g, '');
+    
+    // Limitar a 12 caracteres
+    if (numbersOnly.length <= 12) {
+      setFormData({ ...formData, dni: numbersOnly });
+      if (formErrors.dni) {
+        setFormErrors({ ...formErrors, dni: '' });
+      }
+    }
+  };
+
   const handlePhoneChange = (text: string) => {
-    // Si el usuario borra todo, mantener el prefijo
     if (text === '') {
       setFormData({...formData, phone: '+506 '});
       return;
     }
 
-    // Si no empieza con +, agregarlo
     let cleaned = text;
     if (!cleaned.startsWith('+')) {
       cleaned = '+' + cleaned;
     }
 
-    // Extraer el código de país (primeros dígitos después del +)
     const plusIndex = cleaned.indexOf('+');
-    let countryCode = '506'; // código por defecto
+    let countryCode = '506';
     let number = '';
 
     if (plusIndex === 0) {
       const parts = cleaned.substring(1).split(/\s+/);
       if (parts.length > 0) {
-        // Si hay un código de país explícito (ej: +1, +506, +57)
         const possibleCode = parts[0].replace(/\D/g, '');
         if (possibleCode.length > 0) {
           countryCode = possibleCode;
           number = parts.slice(1).join('').replace(/\D/g, '');
         } else {
-          // Si no hay código, usar el default y tomar el resto como número
           number = parts.join('').replace(/\D/g, '');
         }
       }
     }
 
-    // Limpiar el número (solo dígitos)
     number = number.replace(/\D/g, '');
 
-    // Aplicar formato según la longitud
     let formatted = `+${countryCode}`;
     
     if (number.length > 0) {
       if (countryCode === '506') {
-        // Formato Costa Rica: +506 8888 8888
         if (number.length <= 4) {
           formatted += ' ' + number;
         } else {
           formatted += ' ' + number.substring(0, 4) + ' ' + number.substring(4, 8);
         }
       } else {
-        // Otros países: formato simple
         formatted += ' ' + number.match(/.{1,4}/g)?.join(' ') || number;
       }
     }
@@ -153,7 +169,8 @@ export default function OwnerFormScreen() {
       firstName: '',
       lastName: '',
       email: '',
-      phone: ''
+      phone: '',
+      dni: '' // 👈 Agregado
     };
     
     let isValid = true;
@@ -181,13 +198,19 @@ export default function OwnerFormScreen() {
       errors.phone = 'El teléfono debe tener formato internacional: +50688888888';
       isValid = false;
     }
+
+    // 👇 NUEVA VALIDACIÓN: Validar cédula
+    if (!validateDni(formData.dni)) {
+      errors.dni = 'La cédula debe contener solo números y máximo 12 dígitos';
+      isValid = false;
+    }
     
     setFormErrors(errors);
     return isValid;
   };
 
   const handleSubmit = async () => {
-    console.log('📝 Enviando formulario:', formData);
+    console.log('Enviando formulario:', formData);
     
     if (!validateForm()) {
       Alert.alert('Error', 'Por favor completa los campos requeridos');
@@ -202,11 +225,11 @@ export default function OwnerFormScreen() {
         result = await createOwner(formData);
       }
       
-      console.log('✅ Resultado:', result);
+      console.log(' Resultado:', result);
       
       if (result.success) {
         Alert.alert(
-          '✅ Éxito',
+          'Éxito',
           result.message || (isEditing ? 'Cliente actualizado' : 'Cliente creado'),
           [{ 
             text: 'OK', 
@@ -216,11 +239,11 @@ export default function OwnerFormScreen() {
           }]
         );
       } else {
-        Alert.alert('❌ Error', result.message || 'Ocurrió un error al guardar');
+        Alert.alert(' Error', result.message || 'Ocurrió un error al guardar');
       }
     } catch (error) {
-      console.error('❌ Error en handleSubmit:', error);
-      Alert.alert('❌ Error', 'No se pudo guardar el cliente. Verifica tu conexión.');
+      console.error(' Error en handleSubmit:', error);
+      Alert.alert(' Error', 'No se pudo guardar el cliente. Verifica tu conexión.');
     }
   };
 
@@ -314,12 +337,20 @@ export default function OwnerFormScreen() {
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>DNI/Cédula</Text>
+            <Text style={styles.hint}>
+              Solo números, máximo 12 dígitos
+            </Text>
             <TextInput
-              style={styles.input}
-              placeholder="1-2345-6789"
+              style={[styles.input, formErrors.dni ? styles.inputError : null]}
+              placeholder="123456789"
               value={formData.dni}
-              onChangeText={(text) => setFormData({ ...formData, dni: text })}
+              onChangeText={handleDniChange}
+              keyboardType="numeric"
+              maxLength={12}
             />
+            {formErrors.dni ? (
+              <Text style={styles.errorText}>{formErrors.dni}</Text>
+            ) : null}
           </View>
 
           <View style={styles.inputGroup}>

@@ -78,11 +78,11 @@ export default function OwnerDetailScreen() {
                 // ✅ RECARGAR para actualizar la lista
                 loadOwner();
               } else {
-                Alert.alert('❌ Error', result.message || 'No se pudo eliminar la mascota');
+                Alert.alert(' Error', result.message || 'No se pudo eliminar la mascota');
               }
             } catch (error) {
               console.error('Error eliminando mascota:', error);
-              Alert.alert('❌ Error', 'Ocurrió un error al eliminar la mascota');
+              Alert.alert(' Error', 'Ocurrió un error al eliminar la mascota');
             }
           }
         },
@@ -213,21 +213,21 @@ export default function OwnerDetailScreen() {
           
           {owner.emergencyContact.name && (
             <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>👤 Nombre:</Text>
+              <Text style={styles.infoLabel}> Nombre:</Text>
               <Text style={styles.infoValue}>{owner.emergencyContact.name}</Text>
             </View>
           )}
           
           {owner.emergencyContact.phone && (
             <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>📞 Teléfono:</Text>
+              <Text style={styles.infoLabel}> Teléfono:</Text>
               <Text style={styles.infoValue}>{owner.emergencyContact.phone}</Text>
             </View>
           )}
           
           {owner.emergencyContact.relationship && (
             <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>🤝 Parentesco:</Text>
+              <Text style={styles.infoLabel}> Parentesco:</Text>
               <Text style={styles.infoValue}>{owner.emergencyContact.relationship}</Text>
             </View>
           )}
@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   editOwnerButton: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: '#c0c0c0',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 12,

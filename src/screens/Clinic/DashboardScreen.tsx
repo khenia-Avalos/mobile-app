@@ -1,5 +1,5 @@
 // src/screens/Clinic/DashboardScreen.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -9,9 +9,10 @@ import {
   RefreshControl,
   Alert 
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useClinic } from '../../contexts/ClinicContext';
 import { useAuth } from '../../hooks/useAuth';
+import axios from '../../api/axios-mobile';
 
 export default function DashboardScreen() {
   const navigation = useNavigation();
@@ -28,10 +29,12 @@ export default function DashboardScreen() {
   
   const [refreshing, setRefreshing] = useState(false);
   const [todayAppointments, setTodayAppointments] = useState<any[]>([]);
-  const [staffCount, setStaffCount] = useState(0);
+  const [veterinariansCount, setVeterinariansCount] = useState(0);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
+  const [currentDate, setCurrentDate] = useState('');
 
   // ✅ Función para obtener la fecha actual en Costa Rica (YYYY-MM-DD)
-  const getCurrentDateCR = () => {
+  const getCurrentDateCR = useCallback(() => {
     const date = new Date();
     const options: Intl.DateTimeFormatOptions = { 
       timeZone: 'America/Costa_Rica',
@@ -41,53 +44,134 @@ export default function DashboardScreen() {
     };
     const crDateStr = date.toLocaleDateString('en-CA', options);
     return crDateStr;
-  };
-  
-  useEffect(() => {
-    loadData();
-    fetchStaffCount();
+  }, []);
+
+  // ✅ Función para obtener fecha con formato legible
+  const getFormattedDateCR = useCallback(() => {
+    const date = new Date();
+    return date.toLocaleDateString('es-ES', { 
+      weekday: 'long', 
+      day: 'numeric', 
+      month: 'long',
+      year: 'numeric',
+      timeZone: 'America/Costa_Rica'
+    });
   }, []);
   
-  const loadData = async () => {
-    const todayCR = getCurrentDateCR();
-    console.log('📅 Cargando citas para hoy (Costa Rica):', todayCR);
+  // Cargar datos iniciales
+  useEffect(() => {
+    const initialLoad = async () => {
+      const todayCR = getCurrentDateCR();
+      setCurrentDate(todayCR);
+      console.log(' Cargando citas para hoy (Costa Rica):', todayCR);
+      
+      try {
+        // Cargar datos en paralelo pero asegurando que appointments se cargue con el filtro de fecha
+        await Promise.all([
+          fetchOwners(),
+          fetchPets(),
+          fetchAppointments({ date: todayCR }) // 👈 IMPORTANTE: Pasar la fecha actual
+        ]);
+        
+        setInitialLoadDone(true);
+      } catch (error) {
+        console.error('Error loading initial data:', error);
+        // Intentar cargar appointments sin filtro si falla con filtro
+        try {
+          await fetchAppointments();
+        } catch (e) {
+          console.error('Error loading appointments without filter:', e);
+        }
+        setInitialLoadDone(true);
+      }
+    };
     
-    await Promise.all([
-      fetchOwners(),
-      fetchPets(),
-      fetchAppointments({ date: todayCR })
-    ]);
-  };
-  
-  const fetchStaffCount = async () => {
+    initialLoad();
+    fetchVeterinariansCount();
+  }, []); // Solo ejecutar una vez al montar
+
+  useFocusEffect(
+    useCallback(() => {
+      const todayCR = getCurrentDateCR();
+      
+      // Si cambió el día (pasó la medianoche) o es la primera carga
+      if (currentDate !== todayCR || !initialLoadDone) {
+        console.log('🔄 Día cambiado o primera carga, recargando datos para:', todayCR);
+        setCurrentDate(todayCR);
+        
+        // Recargar appointments con la nueva fecha
+        fetchAppointments({ date: todayCR }).catch(error => {
+          console.error('Error reloading appointments on focus:', error);
+        });
+      }
+    }, [currentDate, initialLoadDone, getCurrentDateCR])
+  );
+
+  // Función para cargar todos los datos (incluyendo veterinarios)
+  const loadData = useCallback(async () => {
+    const todayCR = getCurrentDateCR();
+    setCurrentDate(todayCR);
+    
     try {
-      // Aquí deberías obtener el conteo real del personal desde tu API
-      setStaffCount(8);
+      await Promise.all([
+        fetchOwners(),
+        fetchPets(),
+        fetchAppointments({ date: todayCR })
+      ]);
+      await fetchVeterinariansCount();
     } catch (error) {
-      console.error('Error fetching staff count:', error);
+      console.error('Error loading data:', error);
+    }
+  }, [getCurrentDateCR]);
+
+  const fetchVeterinariansCount = async () => {
+    try {
+      const response = await axios.get('/api/admin/users');
+      
+      let allUsers = [];
+      if (response.data?.users) {
+        allUsers = response.data.users;
+      } else if (Array.isArray(response.data)) {
+        allUsers = response.data;
+      } else if (response.data?.data) {
+        allUsers = response.data.data;
+      }
+      
+      const veterinarians = allUsers.filter((u: any) => u.role === 'veterinarian');
+      setVeterinariansCount(veterinarians.length);
+    } catch (error) {
+      console.error('Error fetching veterinarians count:', error);
+      setVeterinariansCount(0);
     }
   };
   
   const onRefresh = async () => {
     setRefreshing(true);
     await loadData();
-    await fetchStaffCount();
     setRefreshing(false);
   };
   
-  // ✅ Filtrar citas de hoy por fecha SOLAMENTE (sin filtrar por estado)
+  // ✅ Filtrar citas de hoy cuando cambien appointments
   useEffect(() => {
     const todayCR = getCurrentDateCR();
     
     const todayApts = appointments.filter(apt => {
-      const aptDate = apt.appointmentDate ? new Date(apt.appointmentDate).toISOString().split('T')[0] : null;
-      // SOLO filtrar por fecha, mantener TODOS los estados
-      return aptDate === todayCR;
+      // Asegurar que appointmentDate existe y tiene el formato correcto
+      if (!apt.appointmentDate) return false;
+      
+      const aptDate = new Date(apt.appointmentDate).toISOString().split('T')[0];
+      const matches = aptDate === todayCR;
+      
+      if (matches) {
+        console.log(` Cita encontrada para hoy: ${apt.title} - ${aptDate}`);
+      }
+      
+      return matches;
     });
     
-    console.log(`📊 Citas para hoy (todos los estados): ${todayApts.length} de ${appointments.length} totales`);
+    console.log(`Citas para hoy (todos los estados): ${todayApts.length} de ${appointments.length} totales`);
     setTodayAppointments(todayApts);
-  }, [appointments]);
+  }, [appointments, getCurrentDateCR]);
 
   const handleLogout = async () => {
     Alert.alert(
@@ -122,16 +206,18 @@ export default function DashboardScreen() {
     navigation.navigate('Patients' as never);
   };
 
-  const navigateToStaff = () => {
+  const navigateToVeterinarians = () => {
     navigation.navigate('Staff' as never);
   };
 
-  // Calcular estadísticas del día (TODOS los estados)
-  const totalToday = todayAppointments.length;
-  const scheduledCount = todayAppointments.filter(a => a.status === 'scheduled' || a.status === 'confirmed').length;
-  const inProgressCount = todayAppointments.filter(a => a.status === 'in-progress').length;
-  const completedCount = todayAppointments.filter(a => a.status === 'completed').length;
-  const cancelledCount = todayAppointments.filter(a => a.status === 'cancelled' || a.status === 'no-show').length;
+  // No mostrar nada hasta que se complete la carga inicial
+  if (!initialLoadDone && loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text>Cargando dashboard...</Text>
+      </View>
+    );
+  }
 
   return (
     <ScrollView 
@@ -148,13 +234,7 @@ export default function DashboardScreen() {
             </Text>
           </TouchableOpacity>
           <Text style={styles.subtitle}>
-            {new Date().toLocaleDateString('es-ES', { 
-              weekday: 'long', 
-              day: 'numeric', 
-              month: 'long',
-              year: 'numeric',
-              timeZone: 'America/Costa_Rica'
-            })}
+            {getFormattedDateCR()}
           </Text>
         </View>
         
@@ -187,15 +267,13 @@ export default function DashboardScreen() {
         
         <TouchableOpacity 
           style={styles.statCard}
-          onPress={navigateToStaff}
+          onPress={navigateToVeterinarians}
         >
-          <Text style={styles.statNumber}>{staffCount}</Text>
-          <Text style={styles.statLabel}>Personal</Text>
+          <Text style={styles.statNumber}>{veterinariansCount}</Text>
+          <Text style={styles.statLabel}>Veterinarios</Text>
         </TouchableOpacity>
       </View>
 
- 
-      
       <View style={styles.quickActions}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Acciones Rápidas</Text>
@@ -250,7 +328,7 @@ export default function DashboardScreen() {
       {/* Citas de hoy - MUESTRA TODOS LOS ESTADOS */}
       <View style={styles.todaySection}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Citas para hoy ({totalToday})</Text>
+          <Text style={styles.sectionTitle}>Citas para hoy ({todayAppointments.length})</Text>
           <TouchableOpacity onPress={() => navigation.navigate('Appointments' as never)}>
             <Text style={styles.seeAll}>Ver todas</Text>
           </TouchableOpacity>
@@ -275,7 +353,7 @@ export default function DashboardScreen() {
                 Alert.alert(
                   'Detalle de Cita',
                   `${apt.title}\n\n` +
-                  ` ${new Date(apt.appointmentDate).toLocaleDateString('es-ES', { timeZone: 'America/Costa_Rica' })}\n` +
+                  `${new Date(apt.appointmentDate).toLocaleDateString('es-ES', { timeZone: 'America/Costa_Rica' })}\n` +
                   ` ${apt.startTime} - ${apt.endTime}\n` +
                   ` ${apt.pet?.name || 'Sin mascota'} (${apt.pet?.species || ''})\n` +
                   ` ${apt.owner?.firstName || ''} ${apt.owner?.lastName || ''}\n` +
@@ -358,6 +436,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8fafc',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     flexDirection: 'row',

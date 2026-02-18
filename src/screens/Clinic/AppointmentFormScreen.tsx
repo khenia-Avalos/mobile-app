@@ -27,10 +27,75 @@ type RootStackParamList = {
 type AppointmentFormScreenRouteProp = RouteProp<RootStackParamList, 'AppointmentForm'>;
 type AppointmentFormScreenNavigationProp = StackNavigationProp<RootStackParamList, 'AppointmentForm'>;
 
+// ✅ Función para obtener fecha en formato YYYY-MM-DD en zona horaria de Costa Rica
+const getDateInCRFormat = (date: Date): string => {
+  const options: Intl.DateTimeFormatOptions = {
+    timeZone: 'America/Costa_Rica',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  };
+  return date.toLocaleDateString('en-CA', options);
+};
+
+const getCurrentTimeInCR = (): string => {
+  const now = new Date();
+  const options: Intl.DateTimeFormatOptions = {
+    timeZone: 'America/Costa_Rica',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  };
+  return now.toLocaleTimeString('en-US', options);
+};
+
+const isTimeSlotInPast = (date: Date, timeStr: string): boolean => {
+  const now = new Date();
+  
+  // Obtener fecha actual en Costa Rica
+  const todayCR = getDateInCRFormat(now);
+  const selectedDateCR = getDateInCRFormat(date);
+  
+  // Si la fecha seleccionada es hoy, verificar la hora
+  if (selectedDateCR === todayCR) {
+    // Obtener hora actual en Costa Rica
+    const currentTimeCR = getCurrentTimeInCR();
+    
+    // Parsear horas y minutos
+    const [slotHour, slotMinute] = timeStr.split(':').map(Number);
+    const [currentHour, currentMinute] = currentTimeCR.split(':').map(Number);
+    
+    console.log(` Comparando horarios - Slot: ${timeStr} (${slotHour}:${slotMinute}) vs Actual: ${currentTimeCR} (${currentHour}:${currentMinute})`);
+    
+    // Comparar horas
+    if (slotHour < currentHour) {
+      console.log(` Horario ${timeStr} ya pasó (hora menor)`);
+      return true;
+    }
+    if (slotHour === currentHour && slotMinute <= currentMinute) {
+      console.log(` Horario ${timeStr} ya pasó (misma hora o minutos menores/iguales)`);
+      return true;
+    }
+    
+    console.log(` Horario ${timeStr} aún disponible`);
+    return false;
+  }
+  
+  // Si la fecha seleccionada es futura, el horario no ha pasado
+  return false;
+};
+
+// Función para crear una fecha con zona horaria de Costa Rica
+const createDateInCR = (year: number, month: number, day: number): Date => {
+  // Crear fecha en UTC que represente correctamente el día en Costa Rica
+  // Costa Rica es UTC-6, entonces para que sea medianoche en CR, necesitamos 6 AM UTC
+  return new Date(Date.UTC(year, month, day, 6, 0, 0));
+};
+
 export default function AppointmentFormScreen() {
   const navigation = useNavigation<AppointmentFormScreenNavigationProp>();
   const route = useRoute<AppointmentFormScreenRouteProp>();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const { 
     owners, 
     pets, 
@@ -44,10 +109,18 @@ export default function AppointmentFormScreen() {
   const { id, petId, ownerId } = route.params || {};
   const isEditing = !!id;
   
+  //  Crear fecha inicial como hoy en Costa Rica
+  const getInitialDate = () => {
+    const now = new Date();
+    const crDateStr = getDateInCRFormat(now);
+    const [year, month, day] = crDateStr.split('-').map(Number);
+    return createDateInCR(year, month - 1, day);
+  };
+  
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    appointmentDate: new Date(),
+    appointmentDate: getInitialDate(),
     startTime: '',
     endTime: '',
     type: 'consulta',
@@ -75,13 +148,43 @@ export default function AppointmentFormScreen() {
   const [loadingVets, setLoadingVets] = useState(false);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [occupiedSlots, setOccupiedSlots] = useState<any[]>([]);
+  const [currentTimeInCR, setCurrentTimeInCR] = useState(getCurrentTimeInCR());
+  const [todayDateCR, setTodayDateCR] = useState(getDateInCRFormat(new Date()));
+
+  // Estados para búsqueda
+  const [ownerSearchQuery, setOwnerSearchQuery] = useState('');
+  const [petSearchQuery, setPetSearchQuery] = useState('');
 
   useEffect(() => {
     loadData();
     if (id) {
       loadAppointment();
     }
+    
+    // Actualizar hora actual cada minuto
+    const interval = setInterval(() => {
+      setCurrentTimeInCR(getCurrentTimeInCR());
+      setTodayDateCR(getDateInCRFormat(new Date()));
+    }, 60000);
+    
+    return () => clearInterval(interval);
   }, [id]);
+
+  // Efecto para actualizar ownerPets cuando cambian los datos
+  useEffect(() => {
+    if (selectedOwner) {
+      const filteredPets = pets.filter(pet => {
+        // Verificar diferentes formas de relación owner-pet
+        return (
+          (pet.owner && pet.owner._id === selectedOwner._id) ||
+          (pet.ownerId === selectedOwner._id) ||
+          (pet.owner_id === selectedOwner._id)
+        );
+      });
+      console.log(`Mascotas encontradas para ${selectedOwner.firstName}:`, filteredPets.length);
+      setOwnerPets(filteredPets);
+    }
+  }, [selectedOwner, pets]);
 
   const loadData = async () => {
     await Promise.all([
@@ -109,7 +212,7 @@ export default function AppointmentFormScreen() {
     Alert.alert('Info', 'Carga de cita existente - Funcionalidad por implementar');
   };
 
-  // ✅ Cargar veterinarios SOLO cuando se presiona el botón
+  //  Cargar veterinarios SOLO cuando se presiona el botón
   const loadAvailableVeterinarians = async () => {
     if (!formData.appointmentDate) {
       Alert.alert('Error', 'Primero selecciona una fecha');
@@ -118,8 +221,8 @@ export default function AppointmentFormScreen() {
     
     setLoadingVets(true);
     try {
-      const dateStr = formData.appointmentDate.toISOString().split('T')[0];
-      console.log('📅 Buscando veterinarios para fecha:', dateStr);
+      const dateStr = getDateInCRFormat(formData.appointmentDate);
+      console.log(' Buscando veterinarios para fecha (CR):', dateStr);
       
       const response = await axios.get(`/api/veterinarians/available`, {
         params: { date: dateStr }
@@ -152,21 +255,21 @@ export default function AppointmentFormScreen() {
         }
       }
     } catch (error: any) {
-      console.error('❌ Error:', error);
+      console.error(' Error:', error);
       Alert.alert('Error', 'No se pudieron cargar los veterinarios');
     } finally {
       setLoadingVets(false);
     }
   };
 
-  // ✅ Cargar horarios con verificación ESTRICTA de ocupados
+  //  Cargar horarios con verificación ESTRICTA de ocupados y horarios pasados
   const loadVeterinarianTimeSlots = async (vetId: string) => {
     if (!formData.appointmentDate || !vetId) return;
     
     setLoadingSlots(true);
     try {
-      const dateStr = formData.appointmentDate.toISOString().split('T')[0];
-      console.log('⏰ Buscando horarios para veterinario:', vetId, 'fecha:', dateStr);
+      const dateStr = getDateInCRFormat(formData.appointmentDate);
+      console.log(' Buscando horarios para veterinario:', vetId, 'fecha (CR):', dateStr);
       
       // 1. Obtener slots disponibles del backend
       const response = await axios.get(`/api/veterinarians/${vetId}/availability`, {
@@ -189,24 +292,49 @@ export default function AppointmentFormScreen() {
         }
       });
       
-      console.log('🚫 Horarios ocupados:', Array.from(occupiedMap.keys()));
+      console.log(' Horarios ocupados por citas:', Array.from(occupiedMap.keys()));
       setOccupiedSlots(appointments);
       
-      // 4. Marcar slots como disponibles SOLO si no están ocupados
+      // 4. Verificar si la fecha seleccionada es hoy
+      const isToday = dateStr === todayDateCR;
+      console.log(` ¿Es hoy? ${isToday ? 'SÍ' : 'NO'} - Hora actual: ${currentTimeInCR}`);
+      
+      // 5. Procesar slots
       const slots = response.data.availableSlots || [];
       const formattedSlots = slots.map((slot: any) => {
         const slotKey = `${slot.start}-${slot.end}`;
         const isOccupied = occupiedMap.has(slotKey);
         
+        // Verificar si el horario ya pasó (solo para hoy)
+        let isPast = false;
+        if (isToday) {
+          isPast = isTimeSlotInPast(formData.appointmentDate, slot.start);
+          if (isPast) {
+            console.log(` Horario ${slot.start} - ${slot.end} ha PASADO (${currentTimeInCR})`);
+          }
+        }
+        
+        const isAvailable = !isOccupied && !isPast;
+        
         return {
           start: slot.start,
           end: slot.end,
-          available: !isOccupied,
-          occupied: isOccupied
+          available: isAvailable,
+          occupied: isOccupied,
+          past: isPast
         };
       });
       
-      console.log('🕒 Slots con disponibilidad real:', 
+      // 6. Mostrar resumen
+      const availableCount = formattedSlots.filter((s: any) => s.available).length;
+      const pastCount = formattedSlots.filter((s: any) => s.past).length;
+      const occupiedCount = formattedSlots.filter((s: any) => s.occupied).length;
+      
+      console.log(' Resumen de horarios:');
+      console.log(`    Disponibles: ${availableCount}`);
+      console.log(`    Pasados: ${pastCount}`);
+      console.log(`    Ocupados: ${occupiedCount}`);
+      console.log('   Horarios disponibles:', 
         formattedSlots.filter((s: any) => s.available).map((s: any) => `${s.start}-${s.end}`)
       );
       
@@ -215,15 +343,20 @@ export default function AppointmentFormScreen() {
       if (formattedSlots.length === 0) {
         Alert.alert('Sin horarios', 'No hay horarios configurados.', [{ text: 'OK' }]);
       } else {
-        const availableCount = formattedSlots.filter((s: any) => s.available).length;
         if (availableCount === 0) {
-          Alert.alert('Horario ocupado', 'Todos los horarios están ocupados.', [{ text: 'OK' }]);
+          Alert.alert(
+            'Sin horarios disponibles', 
+            isToday 
+              ? `Ya no hay horarios disponibles para hoy (${currentTimeInCR})` 
+              : 'Todos los horarios están ocupados',
+            [{ text: 'OK' }]
+          );
         } else {
           setShowTimeSlotsModal(true);
         }
       }
     } catch (error: any) {
-      console.error('❌ Error loading time slots:', error);
+      console.error(' Error loading time slots:', error);
       Alert.alert('Error', 'No se pudieron cargar los horarios');
     } finally {
       setLoadingSlots(false);
@@ -233,9 +366,20 @@ export default function AppointmentFormScreen() {
   const handleSelectOwner = (owner: any) => {
     setSelectedOwner(owner);
     setFormData(prev => ({ ...prev, owner: owner._id }));
-    const ownerPets = pets.filter(pet => pet.owner?._id === owner._id);
-    setOwnerPets(ownerPets);
+    
+    // Filtrar mascotas del dueño seleccionado
+    const filteredPets = pets.filter(pet => {
+      return (
+        (pet.owner && pet.owner._id === owner._id) ||
+        (pet.ownerId === owner._id) ||
+        (pet.owner_id === owner._id)
+      );
+    });
+    
+    console.log(`Mascotas encontradas para ${owner.firstName}:`, filteredPets.length);
+    setOwnerPets(filteredPets);
     setShowOwnerModal(false);
+    setOwnerSearchQuery(''); // Limpiar búsqueda
   };
 
   const handleSelectPet = (pet: any) => {
@@ -254,6 +398,7 @@ export default function AppointmentFormScreen() {
     }
     
     setShowPetModal(false);
+    setPetSearchQuery(''); // Limpiar búsqueda
   };
 
   const handleSelectVeterinarian = (vet: any) => {
@@ -264,8 +409,27 @@ export default function AppointmentFormScreen() {
   };
 
   const handleSelectTimeSlot = (slot: any) => {
+    // Doble verificación antes de seleccionar
+    const isToday = getDateInCRFormat(formData.appointmentDate) === todayDateCR;
+    
+    if (isToday) {
+      if (isTimeSlotInPast(formData.appointmentDate, slot.start)) {
+        Alert.alert(
+          'Horario no disponible', 
+          `Este horario (${slot.start}) ya pasó. La hora actual es ${currentTimeInCR}.`,
+          [{ text: 'OK' }]
+        );
+        // Recargar horarios para actualizar la lista
+        if (selectedVet) {
+          loadVeterinarianTimeSlots(selectedVet._id);
+        }
+        return;
+      }
+    }
+    
     if (!slot.available) {
-      Alert.alert('Horario no disponible', 'Este horario ya está ocupado');
+      const reason = slot.past ? 'Este horario ya pasó' : 'Este horario ya está ocupado';
+      Alert.alert('Horario no disponible', reason);
       return;
     }
     
@@ -276,7 +440,7 @@ export default function AppointmentFormScreen() {
     }));
     setShowTimeSlotsModal(false);
     
-    Alert.alert('Horario seleccionado', `✅ ${slot.start} - ${slot.end}`, [{ text: 'OK' }]);
+    Alert.alert('Horario seleccionado', ` ${slot.start} - ${slot.end}`, [{ text: 'OK' }]);
   };
 
   const handleDateChange = (event: any, date?: Date) => {
@@ -285,9 +449,16 @@ export default function AppointmentFormScreen() {
     }
     
     if (date) {
+      // Asegurar que la fecha seleccionada se interprete correctamente en CR
+      const crDateStr = getDateInCRFormat(date);
+      const [year, month, day] = crDateStr.split('-').map(Number);
+      const crDate = createDateInCR(year, month - 1, day);
+      
+      console.log(`Fecha seleccionada (CR): ${crDateStr}`);
+      
       setFormData({ 
         ...formData, 
-        appointmentDate: date,
+        appointmentDate: crDate,
         veterinarian: '',
         startTime: '',
         endTime: ''
@@ -298,6 +469,7 @@ export default function AppointmentFormScreen() {
   };
 
   const handleSubmit = async () => {
+    // Validaciones
     if (!formData.title.trim()) {
       Alert.alert('Error', 'El título es requerido');
       return;
@@ -318,6 +490,20 @@ export default function AppointmentFormScreen() {
       return;
     }
 
+    // Verificación final de horario pasado (solo para hoy)
+    const selectedDateCR = getDateInCRFormat(formData.appointmentDate);
+    const isToday = selectedDateCR === todayDateCR;
+    
+    if (isToday) {
+      if (isTimeSlotInPast(formData.appointmentDate, formData.startTime)) {
+        Alert.alert(
+          'Error', 
+          `No puedes agendar citas en horarios que ya pasaron. La hora actual es ${currentTimeInCR}.`
+        );
+        return;
+      }
+    }
+
     // Verificación final de disponibilidad
     const isStillAvailable = !occupiedSlots.some((apt: any) => 
       apt.startTime === formData.startTime && apt.endTime === formData.endTime
@@ -325,13 +511,16 @@ export default function AppointmentFormScreen() {
 
     if (!isStillAvailable) {
       Alert.alert('Error', 'Este horario ya no está disponible. Por favor selecciona otro.');
-      loadVeterinarianTimeSlots(formData.veterinarian);
+      if (selectedVet) {
+        loadVeterinarianTimeSlots(selectedVet._id);
+      }
       return;
     }
 
+    // Preparar datos para enviar
     const appointmentData = {
       ...formData,
-      appointmentDate: formData.appointmentDate.toISOString(),
+      appointmentDate: getDateInCRFormat(formData.appointmentDate),
       price: parseFloat(formData.price) || 0
     };
 
@@ -345,21 +534,22 @@ export default function AppointmentFormScreen() {
       
       if (result.success) {
         Alert.alert(
-          '✅ Éxito',
+          'Éxito',
           isEditing ? 'Cita actualizada correctamente' : 'Cita creada correctamente',
           [{ text: 'OK', onPress: () => navigation.goBack() }]
         );
       } else {
-        Alert.alert('❌ Error', result.message || 'No se pudo guardar la cita');
+        Alert.alert(' Error', result.message || 'No se pudo guardar la cita');
       }
     } catch (error: any) {
-      console.error('Error:', error);
-      Alert.alert('❌ Error', error.message || 'Ocurrió un error al guardar la cita');
+      console.error(' Error:', error);
+      Alert.alert('Error', error.message || 'Ocurrió un error al guardar la cita');
     }
   };
 
   const formatDate = (date: Date) => {
     return date.toLocaleDateString('es-ES', {
+      timeZone: 'America/Costa_Rica',
       weekday: 'long',
       day: 'numeric',
       month: 'long',
@@ -377,12 +567,36 @@ export default function AppointmentFormScreen() {
     { value: 'otros', label: 'Otros' }
   ];
 
+  // Filtrar dueños por búsqueda
+  const filteredOwners = owners.filter(owner => {
+    const fullName = `${owner.firstName} ${owner.lastName}`.toLowerCase();
+    const searchLower = ownerSearchQuery.toLowerCase();
+    return fullName.includes(searchLower) || 
+           (owner.phone && owner.phone.includes(ownerSearchQuery));
+  });
+
+  // Filtrar mascotas por búsqueda
+  const filteredPets = ownerPets.filter(pet => {
+    const petName = pet.name.toLowerCase();
+    const searchLower = petSearchQuery.toLowerCase();
+    return petName.includes(searchLower) || 
+           (pet.species && pet.species.toLowerCase().includes(searchLower));
+  });
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>
           {isEditing ? 'Editar Cita' : 'Nueva Cita'}
         </Text>
+        <View style={styles.timeInfo}>
+          <Text style={styles.currentTime}>
+             Hora actual (CR): {currentTimeInCR}
+          </Text>
+          <Text style={styles.dateInfo}>
+             Hoy: {formatDate(new Date())}
+          </Text>
+        </View>
       </View>
 
       <View style={styles.form}>
@@ -411,7 +625,7 @@ export default function AppointmentFormScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Veterinario - AHORA con clic manual */}
+        {/* Veterinario */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Veterinario *</Text>
           <TouchableOpacity 
@@ -426,20 +640,20 @@ export default function AppointmentFormScreen() {
                 <Text style={formData.veterinarian ? styles.selectorTextSelected : styles.selectorText}>
                   {selectedVet 
                     ? `${selectedVet.username} (${selectedVet.specialty || 'Veterinario'})`
-                    : '🔍 Toca para buscar veterinarios'}
+                    : ' Toca para buscar veterinarios'}
                 </Text>
                 <Text style={styles.selectorArrow}>▼</Text>
               </>
             )}
           </TouchableOpacity>
           <Text style={styles.helperText}>
-            {formData.appointmentDate 
-              ? `Buscar veterinarios disponibles para ${formData.appointmentDate.toLocaleDateString()}`
-              : 'Selecciona una fecha primero'}
+            {getDateInCRFormat(formData.appointmentDate) === todayDateCR 
+              ? ` Solo se muestran horarios posteriores a ${currentTimeInCR}`
+              : ` Buscar veterinarios disponibles para ${getDateInCRFormat(formData.appointmentDate)}`}
           </Text>
         </View>
 
-        {/* Horario - AHORA con verificación en tiempo real */}
+        {/* Horario */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Horario *</Text>
           <TouchableOpacity 
@@ -454,14 +668,16 @@ export default function AppointmentFormScreen() {
             <Text style={formData.startTime ? styles.selectorTextSelected : styles.selectorText}>
               {formData.startTime 
                 ? `${formData.startTime} - ${formData.endTime}`
-                : '🔍 Toca para ver horarios disponibles'}
+                : ' Toca para ver horarios disponibles'}
             </Text>
             <Text style={styles.selectorArrow}>▼</Text>
           </TouchableOpacity>
           <Text style={styles.helperText}>
             {!formData.veterinarian 
               ? 'Primero selecciona un veterinario'
-              : 'Toca para ver horarios REALMENTE disponibles'}
+              : getDateInCRFormat(formData.appointmentDate) === todayDateCR
+                ? ` Horarios disponibles después de las ${currentTimeInCR}`
+                : 'Toca para ver horarios disponibles'}
           </Text>
         </View>
 
@@ -470,7 +686,10 @@ export default function AppointmentFormScreen() {
           <Text style={styles.label}>Dueño *</Text>
           <TouchableOpacity 
             style={styles.selector}
-            onPress={() => setShowOwnerModal(true)}
+            onPress={() => {
+              setOwnerSearchQuery('');
+              setShowOwnerModal(true);
+            }}
             disabled={!!ownerId}
           >
             <Text style={formData.owner ? styles.selectorTextSelected : styles.selectorText}>
@@ -487,7 +706,10 @@ export default function AppointmentFormScreen() {
           <Text style={styles.label}>Paciente *</Text>
           <TouchableOpacity 
             style={[styles.selector, !formData.owner && styles.selectorDisabled]}
-            onPress={() => setShowPetModal(true)}
+            onPress={() => {
+              setPetSearchQuery('');
+              setShowPetModal(true);
+            }}
             disabled={!formData.owner}
           >
             <Text style={formData.pet ? styles.selectorTextSelected : styles.selectorText}>
@@ -537,18 +759,6 @@ export default function AppointmentFormScreen() {
           />
         </View>
 
-        {/* Precio */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Precio ($)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="0.00"
-            value={formData.price}
-            onChangeText={(text) => setFormData({ ...formData, price: text })}
-            keyboardType="decimal-pad"
-          />
-        </View>
-
         {/* Notas */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Notas adicionales</Text>
@@ -595,6 +805,7 @@ export default function AppointmentFormScreen() {
           mode="date"
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
           onChange={handleDateChange}
+          timeZoneName="America/Costa_Rica"
         />
       )}
 
@@ -665,7 +876,7 @@ export default function AppointmentFormScreen() {
         </View>
       </Modal>
 
-      {/* Modal de Horarios - AHORA con indicador visual de ocupados */}
+      {/* Modal de Horarios */}
       <Modal
         visible={showTimeSlotsModal}
         animationType="slide"
@@ -689,55 +900,71 @@ export default function AppointmentFormScreen() {
                 <Text style={styles.loadingText}>Cargando horarios...</Text>
               </View>
             ) : (
-              <FlatList
-                data={availableTimeSlots}
-                keyExtractor={(item, index) => `${item.start}-${item.end}-${index}`}
-                numColumns={2}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={[
-                      styles.timeSlotItem,
-                      !item.available && styles.timeSlotItemOccupied,
-                      item.available && styles.timeSlotItemAvailable
-                    ]}
-                    onPress={() => handleSelectTimeSlot(item)}
-                    disabled={!item.available}
-                  >
-                    <Text style={[
-                      styles.timeSlotText,
-                      !item.available && styles.timeSlotTextOccupied
-                    ]}>
-                      {item.start} - {item.end}
+              <>
+                {getDateInCRFormat(formData.appointmentDate) === todayDateCR && (
+                  <View style={styles.timeInfoHeader}>
+                    <Text style={styles.timeInfoText}>
+                       Hora actual: {currentTimeInCR}
                     </Text>
-                    <View style={styles.timeSlotStatusContainer}>
-                      <View style={[
-                        styles.timeSlotDot,
-                        item.available ? styles.timeSlotDotAvailable : styles.timeSlotDotOccupied
-                      ]} />
-                      <Text style={[
-                        styles.timeSlotStatusText,
-                        item.available ? styles.timeSlotTextAvailable : styles.timeSlotTextOccupied
-                      ]}>
-                        {item.available ? 'Disponible' : 'Ocupado'}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                )}
-                columnWrapperStyle={styles.timeSlotGrid}
-                ListEmptyComponent={
-                  <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyModalText}>
-                      No hay horarios disponibles
+                    <Text style={styles.timeInfoText}>
+                       Solo se muestran horarios posteriores
                     </Text>
                   </View>
-                }
-              />
+                )}
+                <FlatList
+                  data={availableTimeSlots}
+                  keyExtractor={(item, index) => `${item.start}-${item.end}-${index}`}
+                  numColumns={2}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={[
+                        styles.timeSlotItem,
+                        !item.available && styles.timeSlotItemOccupied,
+                        item.available && styles.timeSlotItemAvailable,
+                        item.past && styles.timeSlotItemPast
+                      ]}
+                      onPress={() => handleSelectTimeSlot(item)}
+                      disabled={!item.available}
+                    >
+                      <Text style={[
+                        styles.timeSlotText,
+                        !item.available && styles.timeSlotTextOccupied,
+                        item.past && styles.timeSlotTextPast
+                      ]}>
+                        {item.start} - {item.end}
+                      </Text>
+                      <View style={styles.timeSlotStatusContainer}>
+                        <View style={[
+                          styles.timeSlotDot,
+                          item.past ? styles.timeSlotDotPast :
+                          item.available ? styles.timeSlotDotAvailable : styles.timeSlotDotOccupied
+                        ]} />
+                        <Text style={[
+                          styles.timeSlotStatusText,
+                          item.past ? styles.timeSlotTextPast :
+                          item.available ? styles.timeSlotTextAvailable : styles.timeSlotTextOccupied
+                        ]}>
+                          {item.past ? ' Pasado' : item.available ? ' Disponible' : ' Ocupado'}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  )}
+                  columnWrapperStyle={styles.timeSlotGrid}
+                  ListEmptyComponent={
+                    <View style={styles.emptyContainer}>
+                      <Text style={styles.emptyModalText}>
+                        No hay horarios disponibles
+                      </Text>
+                    </View>
+                  }
+                />
+              </>
             )}
           </View>
         </View>
       </Modal>
 
-      {/* Modal de Dueños */}
+      {/* Modal de Dueño CON BUSCADOR */}
       <Modal
         visible={showOwnerModal}
         animationType="slide"
@@ -752,8 +979,29 @@ export default function AppointmentFormScreen() {
                 <Text style={styles.modalClose}>✕</Text>
               </TouchableOpacity>
             </View>
+            
+            {/* Buscador de dueños */}
+            <View style={styles.searchContainer}>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Buscar por nombre o teléfono..."
+                value={ownerSearchQuery}
+                onChangeText={setOwnerSearchQuery}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {ownerSearchQuery.length > 0 && (
+                <TouchableOpacity 
+                  style={styles.clearButton}
+                  onPress={() => setOwnerSearchQuery('')}
+                >
+                  <Text style={styles.clearButtonText}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            
             <FlatList
-              data={owners}
+              data={filteredOwners}
               keyExtractor={(item) => item._id || Math.random().toString()}
               renderItem={({ item }) => (
                 <TouchableOpacity
@@ -764,19 +1012,25 @@ export default function AppointmentFormScreen() {
                     {item.firstName} {item.lastName}
                   </Text>
                   <Text style={styles.modalItemSubtext}>
-                    {item.phone || 'Sin teléfono'} • {item.pets?.length || 0} mascotas
+                    {item.phone || 'Sin teléfono'} • {pets.filter(pet => 
+                      (pet.owner && pet.owner._id === item._id) ||
+                      (pet.ownerId === item._id) ||
+                      (pet.owner_id === item._id)
+                    ).length || 0} mascotas
                   </Text>
                 </TouchableOpacity>
               )}
               ListEmptyComponent={
-                <Text style={styles.emptyModalText}>No hay dueños registrados</Text>
+                <Text style={styles.emptyModalText}>
+                  {ownerSearchQuery ? 'No se encontraron dueños' : 'No hay dueños registrados'}
+                </Text>
               }
             />
           </View>
         </View>
       </Modal>
 
-      {/* Modal de Mascotas */}
+      {/* Modal de Mascota CON BUSCADOR */}
       <Modal
         visible={showPetModal}
         animationType="slide"
@@ -786,13 +1040,36 @@ export default function AppointmentFormScreen() {
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Seleccionar Mascota</Text>
+              <Text style={styles.modalTitle}>
+                Mascotas de {selectedOwner?.firstName} {selectedOwner?.lastName}
+              </Text>
               <TouchableOpacity onPress={() => setShowPetModal(false)}>
                 <Text style={styles.modalClose}>✕</Text>
               </TouchableOpacity>
             </View>
+            
+            {/* Buscador de mascotas */}
+            <View style={styles.searchContainer}>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Buscar por nombre o especie..."
+                value={petSearchQuery}
+                onChangeText={setPetSearchQuery}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {petSearchQuery.length > 0 && (
+                <TouchableOpacity 
+                  style={styles.clearButton}
+                  onPress={() => setPetSearchQuery('')}
+                >
+                  <Text style={styles.clearButtonText}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            
             <FlatList
-              data={ownerPets}
+              data={filteredPets}
               keyExtractor={(item) => item._id || Math.random().toString()}
               renderItem={({ item }) => (
                 <TouchableOpacity
@@ -809,7 +1086,9 @@ export default function AppointmentFormScreen() {
               )}
               ListEmptyComponent={
                 <Text style={styles.emptyModalText}>
-                  Este dueño no tiene mascotas registradas
+                  {petSearchQuery 
+                    ? 'No se encontraron mascotas' 
+                    : 'Este dueño no tiene mascotas registradas'}
                 </Text>
               }
             />
@@ -826,7 +1105,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
   },
   header: {
-    backgroundColor: '#0f766e',
+    backgroundColor: '#219eb4',
     padding: 20,
     paddingTop: 40,
   },
@@ -834,6 +1113,19 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: 'white',
+  },
+  timeInfo: {
+    marginTop: 8,
+  },
+  currentTime: {
+    fontSize: 14,
+    color: '#bbf7d0',
+  },
+  dateInfo: {
+    fontSize: 12,
+    color: '#bbf7d0',
+    marginTop: 4,
+    opacity: 0.9,
   },
   form: {
     padding: 16,
@@ -938,7 +1230,7 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     flex: 2,
-    backgroundColor: '#0f766e',
+    backgroundColor: '#219eb4',
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
@@ -1009,12 +1301,12 @@ const styles = StyleSheet.create({
   modalItemSubtext: {
     fontSize: 14,
     color: '#64748b',
-    marginBottom: 8,
   },
   availabilityIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    marginTop: 8,
   },
   availabilityDot: {
     width: 8,
@@ -1039,6 +1331,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#94a3b8',
     marginBottom: 16,
+    padding: 20,
   },
   emptyButton: {
     backgroundColor: '#0891b2',
@@ -1072,12 +1365,21 @@ const styles = StyleSheet.create({
     borderColor: '#fecaca',
     opacity: 0.7,
   },
+  timeSlotItemPast: {
+    backgroundColor: '#f3f4f6',
+    borderColor: '#d1d5db',
+    opacity: 0.5,
+  },
   timeSlotText: {
     fontSize: 14,
     fontWeight: '600',
     marginBottom: 4,
   },
   timeSlotTextOccupied: {
+    color: '#9ca3af',
+    textDecorationLine: 'line-through',
+  },
+  timeSlotTextPast: {
     color: '#9ca3af',
     textDecorationLine: 'line-through',
   },
@@ -1097,35 +1399,61 @@ const styles = StyleSheet.create({
   timeSlotDotOccupied: {
     backgroundColor: '#ef4444',
   },
+  timeSlotDotPast: {
+    backgroundColor: '#9ca3af',
+  },
   timeSlotStatusText: {
     fontSize: 10,
   },
   timeSlotTextAvailable: {
     color: '#10b981',
   },
+  timeInfoHeader: {
+    backgroundColor: '#fef3c7',
+    padding: 12,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#fde68a',
+  },
+  timeInfoText: {
+    fontSize: 12,
+    color: '#92400e',
+    textAlign: 'center',
+  },
+  // Estilos para buscador
+  searchContainer: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    backgroundColor: '#f8fafc',
+    position: 'relative',
+  },
+  searchInput: {
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 20,
+    padding: 12,
+    paddingRight: 40,
+    fontSize: 16,
+  },
+  clearButton: {
+    position: 'absolute',
+    right: 24,
+    top: 20,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#9ca3af',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  clearButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
 });
-
-// Funciones auxiliares fuera del componente
-const getStatusColor = (status: string) => {
-  switch(status) {
-    case 'scheduled': return '#3b82f6';
-    case 'confirmed': return '#10b981';
-    case 'in-progress': return '#f59e0b';
-    case 'completed': return '#6b7280';
-    case 'cancelled': return '#ef4444';
-    case 'no-show': return '#8b5cf6';
-    default: return '#9ca3af';
-  }
-};
-
-const getStatusText = (status: string) => {
-  const statusMap: Record<string, string> = {
-    'scheduled': 'Programada',
-    'confirmed': 'Confirmada',
-    'in-progress': 'En progreso',
-    'completed': 'Completada',
-    'cancelled': 'Cancelada',
-    'no-show': 'No asistió'
-  };
-  return statusMap[status] || status;
-};

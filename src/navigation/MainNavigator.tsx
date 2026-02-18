@@ -27,7 +27,6 @@ import DoctorDashboardScreen from '../screens/Clinic/DoctorDashboardScreen';
 import DoctorAppointmentsScreen from '../screens/Clinic/DoctorAppointmentsScreen';
 
 // PANTALLAS AUTENTICADAS (RECEPCIÓN)
-import ReceptionDashboardScreen from '../screens/Clinic/ReceptionDashboardScreen';
 
 // PANTALLAS AUTENTICADAS (TAREAS EXISTENTES)
 import TasksScreen from '../screens/Tasks/TasksScreen';
@@ -100,7 +99,6 @@ export default function MainNavigator() {
         ) : user.role === 'assistant' ? (
           // ASISTENTE
           <>
-            <Stack.Screen name="ReceptionDashboard" component={ReceptionDashboardScreen} />
             <Stack.Screen name="Owners" component={OwnersScreen} />
             <Stack.Screen name="OwnerForm" component={OwnerFormScreen} />
             <Stack.Screen name="PetForm" component={PetFormScreen} />

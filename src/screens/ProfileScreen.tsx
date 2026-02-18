@@ -124,39 +124,71 @@ export default function ProfileScreen() {
 
     setLoading(true);
     try {
-      let result;
+      let response;
       
       if (isOwnProfile) {
-        result = await updateUserProfile(formData);
+        // 📌 Para perfil propio, usamos updateUserProfile del contexto
+        response = await updateUserProfile(formData);
       } else {
-        const response = await axios.put(`/api/admin/users/${userId}`, formData);
-        result = response.data;
+        // 📌 Para perfil de otro usuario (admin), llamada directa a la API
+        response = await axios.put(`/api/admin/users/${userId}`, formData);
       }
       
-      if (result.success) {
+      // 📌 VERIFICACIÓN CORREGIDA - Diferentes formatos de respuesta
+      // El backend puede responder con { success: true } o directamente con los datos
+      const isSuccess = 
+        response?.success === true || 
+        response?.data?.success === true ||
+        response?.status === 200 ||
+        (response?.data && !response?.data?.error);
+      
+      console.log(' Respuesta del servidor:', response);
+      
+      if (isSuccess) {
         Alert.alert(
           'Éxito',
           'Perfil actualizado correctamente',
           [{ text: 'OK', onPress: () => {
             setIsEditing(false);
+            
+            // Actualizar el perfil local
+            if (profileUser) {
+              setProfileUser({
+                ...profileUser,
+                ...formData
+              });
+            }
+            
+            // Si es perfil de otro usuario y admin, volver
             if (!isOwnProfile) {
               navigation.goBack();
             }
           }}]
         );
-        
-        if (profileUser) {
-          setProfileUser({
-            ...profileUser,
-            ...formData
-          });
-        }
       } else {
-        Alert.alert('Error', 'No se pudo actualizar el perfil');
+        // Mostrar mensaje de error del servidor si existe
+        const errorMessage = response?.data?.message || response?.message || 'No se pudo actualizar el perfil';
+        Alert.alert('Error', errorMessage);
       }
     } catch (error: any) {
       console.error('Error saving profile:', error);
-      Alert.alert('Error', error.response?.data?.[0] || 'No se pudo conectar con el servidor');
+      
+      // 📌 MANEJO DE ERRORES MEJORADO
+      let errorMessage = 'No se pudo conectar con el servidor';
+      
+      if (error.response) {
+        // El servidor respondió con un error
+        console.log('Error response:', error.response.data);
+        errorMessage = error.response.data?.message || error.response.data?.[0] || `Error ${error.response.status}`;
+      } else if (error.request) {
+        // La petición se hizo pero no hubo respuesta
+        errorMessage = 'No se recibió respuesta del servidor';
+      } else {
+        // Error al configurar la petición
+        errorMessage = error.message;
+      }
+      
+      Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
     }
@@ -188,14 +220,12 @@ export default function ProfileScreen() {
           {
             text: 'Sí, continuar',
             onPress: () => {
-              // Navegar a ForgotPassword igual que el perfil propio
               navigation.navigate('ForgotPassword' as never);
             }
           }
         ]
       );
     } else if (isOwnProfile) {
-      // Es su propio perfil
       navigation.navigate('ForgotPassword' as never);
     } else {
       Alert.alert('Acción no permitida', 'No tienes permiso para cambiar esta contraseña');
@@ -276,7 +306,7 @@ export default function ProfileScreen() {
                 style={styles.editButton}
                 onPress={() => setIsEditing(true)}
               >
-                <Text style={styles.editButtonText}> Editar</Text>
+                <Text style={styles.editButtonText}>Editar</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -397,7 +427,7 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        {/* ✅ CONFIGURACIÓN - Visible para perfil propio O para administradores editando otros */}
+        {/* Configuración - Visible para perfil propio O para administradores editando otros */}
         {(isOwnProfile || (user?.role === 'admin' && !isOwnProfile)) && (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Configuración</Text>

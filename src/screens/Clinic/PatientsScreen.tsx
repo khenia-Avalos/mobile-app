@@ -271,12 +271,7 @@ export default function PatientsScreen() {
             Total: {pets.length} {pets.length === 1 ? 'mascota' : 'mascotas'}
           </Text>
         </View>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={handleAddPet}
-        >
-          <Text style={styles.addButtonText}>+ Nuevo Paciente</Text>
-        </TouchableOpacity>
+      
       </View>
 
       {/* Buscador */}

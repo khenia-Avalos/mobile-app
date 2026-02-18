@@ -37,7 +37,7 @@ type Availability = {
 };
 
 export default function RegisterScreen() {
-  const { user, loading, registerStaff } = useAuth(); // 👈 CAMBIADO: ahora usa registerStaff
+  const { user, loading, registerStaff } = useAuth(); //  CAMBIADO: ahora usa registerStaff
   const navigation = useNavigation();
   const { control, handleSubmit, watch } = useForm<FormData>({
     defaultValues: {
@@ -100,7 +100,7 @@ export default function RegisterScreen() {
         })
       };
 
-      console.log('📤 Enviando datos al backend:', staffUserData);
+      console.log(' Enviando datos al backend:', staffUserData);
       
       // 👈 LLAMADA REAL A LA API
       const result = await registerStaff(staffUserData);
@@ -124,7 +124,7 @@ export default function RegisterScreen() {
       }
 
     } catch (error: any) {
-      console.error('❌ Error en onSubmit:', error);
+      console.error(' Error en onSubmit:', error);
       Alert.alert('Error', error?.message || 'No se pudo registrar el usuario');
       setSaving(false);
     }
@@ -279,18 +279,11 @@ export default function RegisterScreen() {
                     onPress={() => onChange('veterinarian')}
                   >
                     <Text style={[styles.roleText, value === 'veterinarian' && styles.roleTextSelected]}>
-                      🐾 Veterinario
+                 personal veterinario
                     </Text>
                   </TouchableOpacity>
                   
-                  <TouchableOpacity
-                    style={[styles.roleButton, value === 'assistant' && styles.roleButtonSelected]}
-                    onPress={() => onChange('assistant')}
-                  >
-                    <Text style={[styles.roleText, value === 'assistant' && styles.roleTextSelected]}>
-                      📋 Asistente
-                    </Text>
-                  </TouchableOpacity>
+                 
                 </>
               )}
             />
@@ -392,12 +385,6 @@ export default function RegisterScreen() {
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.linkButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.linkText}>Cancelar y volver</Text>
-        </TouchableOpacity>
       </View>
     </ScrollView>
   );
@@ -412,7 +399,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#0f766e',
+    backgroundColor: '#ffffff',
     textAlign: 'center',
     marginTop: 40,
     marginBottom: 8,
@@ -481,8 +468,8 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   roleButtonSelected: {
-    backgroundColor: '#0f766e',
-    borderColor: '#0d9488',
+    backgroundColor: '#219eb4',
+    borderColor: '#f9f9f9',
   },
   roleText: {
     fontSize: 16,
@@ -543,7 +530,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   button: {
-    backgroundColor: '#0f766e',
+    backgroundColor: '#219eb4',
     padding: 18,
     borderRadius: 12,
     alignItems: 'center',
